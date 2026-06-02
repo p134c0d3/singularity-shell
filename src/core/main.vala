@@ -84,6 +84,8 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
         settings.changed["background-picture-uri"].connect(() => {
             if (settings.get_string("accent-color") == "wallpaper") {
                 update_accent_color();
+            } else {
+                persist_user_appearance();
             }
         });
         settings.changed["dark-mode"].connect(() => {
@@ -827,6 +829,15 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
         }
         // Re-tint the labwc SSD titlebar to follow the new accent.
         apply_labwc_theme(settings.get_boolean("dark-mode"));
+        persist_user_appearance();
+    }
+
+    private void persist_user_appearance() {
+        string accent = Singularity.Style.StyleManager.get_default().accent_hex;
+        string bg = settings.get_string("background-picture-uri");
+        var acc = Singularity.Core.Users.AccountsService.get_default();
+        acc.set_desktop_string.begin("Accent", accent);
+        acc.set_desktop_string.begin("Background", bg);
     }
 
     private void update_theme_mode() {

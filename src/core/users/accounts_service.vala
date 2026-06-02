@@ -33,6 +33,11 @@ namespace Singularity.Core.Users {
         public abstract async void set_locked (bool locked) throws IOError;
         public abstract async void set_automatic_login (bool enabled) throws IOError;
     }
+    [DBus (name = "org.freedesktop.DBus.Properties")]
+    public interface AccountProperties : Object {
+        [DBus (name = "Set")]
+        public abstract async void set_prop (string iface, string name, Variant value) throws GLib.Error;
+    }
     public class AccountsService : Object {
         private static AccountsService? instance;
         private AccountsManager? manager;
@@ -108,6 +113,21 @@ namespace Singularity.Core.Users {
         public async void delete_user(AccountUser user, bool remove_files) throws IOError {
             if (manager == null) throw new IOError.FAILED("Manager not initialized");
             yield manager.delete_user((int64)user.uid, remove_files);
+        }
+
+        // Persist a value under the com.singularity.Desktop AccountsService vendor
+        // extension, so the greeter can read it per-user before login. The daemon
+        // writes the world-readable keyfile after a polkit set-own-user-data check.
+        public async void set_desktop_string(string key, string val) {
+            if (manager == null) return;
+            try {
+                var path = yield manager.find_user_by_name(Environment.get_user_name());
+                AccountProperties props = yield Bus.get_proxy(
+                    BusType.SYSTEM, "org.freedesktop.Accounts", path);
+                yield props.set_prop("com.singularity.Desktop", key, new Variant.string(val));
+            } catch (GLib.Error e) {
+                warning("Failed to persist %s to AccountsService: %s", key, e.message);
+            }
         }
 
         public async AccountUser? get_current_user() {
