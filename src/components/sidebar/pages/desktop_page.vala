@@ -1377,16 +1377,15 @@ namespace Singularity {
             var seen = new HashSet<string>();
             foreach (string uri in recent) seen.add(uri);
 
-            string[] paths = {
-                "/usr/share/backgrounds/singularity",
-                "/usr/local/share/backgrounds/singularity",
-                Environment.get_home_dir() + "/.local/share/backgrounds/singularity",
-                "/usr/share/backgrounds",
-                "/usr/local/share/backgrounds",
-                Environment.get_home_dir() + "/.local/share/backgrounds"
-            };
+            var path_list = new ArrayList<string>();
+            foreach (unowned string d in GLib.Environment.get_system_data_dirs())
+                path_list.add(GLib.Path.build_filename(d, "backgrounds", "singularity"));
+            path_list.add(GLib.Path.build_filename(GLib.Environment.get_user_data_dir(), "backgrounds", "singularity"));
+            foreach (unowned string d in GLib.Environment.get_system_data_dirs())
+                path_list.add(GLib.Path.build_filename(d, "backgrounds"));
+            path_list.add(GLib.Path.build_filename(GLib.Environment.get_user_data_dir(), "backgrounds"));
 
-            string[] scan_paths = paths;
+            string[] scan_paths = path_list.to_array();
             new GLib.Thread<void>("wallpaper-scan", () => {
                 var candidates = new ArrayList<WallpaperCandidate>();
                 var thread_seen = new HashSet<string>();
