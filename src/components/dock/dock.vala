@@ -2166,6 +2166,13 @@ namespace Singularity {
             if (_hidden) {
                 GtkLayerShell.set_exclusive_zone(this, 0);
                 app_system.shell_dock_height = 0;
+                if (dimension > 10 && _slide_anim == null) {
+                    int edge_margin = -(dimension - 4);
+                    if (_current_margin != edge_margin) {
+                        _current_margin = edge_margin;
+                        set_margin(this, _dock_edge(), edge_margin);
+                    }
+                }
             } else {
                 if (!autohide && !(intellihide && is_any_window_maximized_on_my_monitor())) {
                     int zone = int.max(0, dimension - SHADOW_BOTTOM_PX);
