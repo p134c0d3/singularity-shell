@@ -40,7 +40,6 @@ shell_deps = [
   dependency('goa-1.0'),
   dependency('goa-backend-1.0'),
   dependency('polkit-gobject-1'),
-  dependency('gnome-desktop-4'),
   dependency('libsoup-3.0'),
   dependency('json-glib-1.0'),
   dependency('libpeas-2'),

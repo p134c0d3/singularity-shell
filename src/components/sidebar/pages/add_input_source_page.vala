@@ -1,12 +1,10 @@
 using Gtk;
-using Gnome;
 using Singularity.Widgets;
 
 namespace Singularity.SidebarPages {
 
     public class AddInputSourcePage : SettingsPage {
         public signal void source_selected(string id, string name);
-        private XkbInfo xkb_info;
         private List<InputSourceInfo> all_sources;
         private Singularity.Widgets.SearchEntry search_entry;
         private PreferencesGroup list_group;
@@ -27,7 +25,6 @@ namespace Singularity.SidebarPages {
             back_clicked.connect(() => {
                 view.navigate_to("keyboard");
             });
-            xkb_info = new XkbInfo();
             all_sources = new List<InputSourceInfo>();
             search_entry = new Singularity.Widgets.SearchEntry();
             search_entry.placeholder_text = _("Search languages...");
@@ -42,20 +39,80 @@ namespace Singularity.SidebarPages {
         }
 
         private void load_sources() {
-            var layouts = xkb_info.get_all_layouts();
-            foreach (var layout_id in layouts) {
-                string name;
-                string short_desc;
-                string xkb_layout;
-                string xkb_variant;
-                if (xkb_info.get_layout_info(layout_id, out name, out short_desc, out xkb_layout, out xkb_variant)) {
-                    all_sources.append(new InputSourceInfo(layout_id, name, short_desc));
+            string? path = find_layout_list();
+            if (path != null) {
+                string contents;
+                try {
+                    FileUtils.get_contents(path, out contents);
+                    string section = "";
+                    foreach (unowned string raw in contents.split("\n")) {
+                        string line = raw.chomp();
+                        if (line.has_prefix("!")) {
+                            section = line.substring(1).strip();
+                            continue;
+                        }
+                        if (line.strip() == "")
+                            continue;
+                        if (section == "layout")
+                            add_layout(line);
+                        else if (section == "variant")
+                            add_variant(line);
+                    }
+                } catch (Error e) {
+                    warning("Could not read keyboard layout list: %s", e.message);
                 }
             }
             all_sources.sort((a, b) => {
                 return a.name.collate(b.name);
             });
             populate_list();
+        }
+
+        private string? find_layout_list() {
+            string[] paths = {
+                "/usr/share/X11/xkb/rules/evdev.lst",
+                "/usr/local/share/X11/xkb/rules/evdev.lst"
+            };
+            foreach (unowned string p in paths) {
+                if (FileUtils.test(p, FileTest.EXISTS))
+                    return p;
+            }
+            return null;
+        }
+
+        private int first_blank(string s) {
+            for (int i = 0; i < s.length; i++) {
+                if (s[i] == ' ' || s[i] == '\t')
+                    return i;
+            }
+            return -1;
+        }
+
+        private void add_layout(string line) {
+            string trimmed = line.strip();
+            int sep = first_blank(trimmed);
+            if (sep <= 0)
+                return;
+            string id = trimmed.substring(0, sep);
+            string desc = trimmed.substring(sep).strip();
+            all_sources.append(new InputSourceInfo(id, desc, id));
+        }
+
+        private void add_variant(string line) {
+            string trimmed = line.strip();
+            int sep = first_blank(trimmed);
+            if (sep <= 0)
+                return;
+            string variant = trimmed.substring(0, sep);
+            string rest = trimmed.substring(sep).strip();
+            string layout = variant;
+            string desc = rest;
+            int colon = rest.index_of(":");
+            if (colon > 0) {
+                layout = rest.substring(0, colon).strip();
+                desc = rest.substring(colon + 1).strip();
+            }
+            all_sources.append(new InputSourceInfo(layout + "+" + variant, desc, layout + "+" + variant));
         }
 
         private void populate_list() {
