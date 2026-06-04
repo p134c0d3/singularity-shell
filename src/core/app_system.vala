@@ -740,24 +740,12 @@ namespace Singularity {
         private void try_atspi(int gen, string safe_id, SimpleActionGroup group) {
             if (menu_generation != gen) return;
             if (!atspi_bus_usable()) return;
-            // Skip AT-SPI scan for Chrome/Chromium - they have huge accessibility
-            // trees, don't expose a menu bar via AT-SPI, and scanning them races
-            // across threads causing crashes.
-            if (safe_id.has_prefix("chrome-") || safe_id.has_prefix("crx_") ||
-                safe_id.has_prefix("chromium-") ||
-                safe_id.has_prefix("com.google.Chrome") ||
-                safe_id.contains("google.Chrome") ||
-                safe_id.down().contains("chrome") ||
-                safe_id.has_prefix("com.google.chrome")) {
-                return;
-            }
             string captured_id = safe_id.dup();
             AtSpiMenuProvider.build_menu_async(captured_id, group, (menu) => {
                 if (menu_generation != gen) return;
                 if (menu != null && menu.get_n_items() > 0) {
                     emit_menu(gen, menu, group);
                 }
-                // else: already showing fallback (desktop entry actions + Window)
             });
         }
 

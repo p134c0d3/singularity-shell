@@ -1195,6 +1195,14 @@ window.inactive.shadow.color: %s
     }
 
     public static int main(string[] args) {
+        // Isolated AT-SPI helper modes: run the scan/activate in a throwaway
+        // process so a fatal libatspi abort can never take down the shell.
+        if (args.length >= 3 && args[1] == "--atspi-menu") {
+            return Singularity.AtSpiMenuProvider.run_scan(args[2]);
+        }
+        if (args.length >= 4 && args[1] == "--atspi-activate") {
+            return Singularity.AtSpiMenuProvider.run_activate(args[2], args[3]);
+        }
         // Internationalization: resolve the locale dir from the install prefix
         // (next to our binary) so translations work whatever the prefix.
         Intl.setlocale(LocaleCategory.ALL, "");
