@@ -5,17 +5,19 @@ lockscreen_sources = [
   'pam_auth.c',
 ]
 
+pam_dep = cc.find_library('pam', required: true)
+
 executable('singularity-lockscreen', lockscreen_sources,
   sources: [sl_proto_c, sl_proto_h],
   dependencies: dependencies + [
     libsingularity_dep,
-    gee_dep
+    gee_dep,
+    pam_dep
   ],
   include_directories: [
     include_directories('.'),
     include_directories('..'),
   ],
-  link_args: ['-lpam'],
   install: true
 )
 

@@ -17,6 +17,7 @@ This builds the main `singularity-desktop` executable along with the
 - NetworkManager (`libnm`), UPower, PulseAudio, GNOME Online Accounts
 - polkit, gnome-desktop-4, libsoup-3.0, json-glib, libpeas-2
 - dbusmenu-glib, atspi-2, tracker-sparql-3.0, gudev-1.0
+- PAM (`libpam`, lock screen authentication)
 - [libsingularity](https://github.com/singularityos-lab/libsingularity)
 
 ## Build & Install
