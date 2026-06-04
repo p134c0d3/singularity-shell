@@ -1245,7 +1245,7 @@ namespace Singularity {
             }
             if (key.has_prefix("run:")) {
                 string app_id = key.substring(4);
-                var app_info = app_system.get_app_info(app_id);
+                var app_info = app_system.resolve_app_for_id(app_id);
                 int win_count = count_app_windows(app_id);
                 return create_dock_item(app_id, app_info, win_count, false, icon_size);
             }

@@ -902,6 +902,78 @@ namespace Singularity {
             return null;
         }
 
+        // Resolve an app_id to its installed AppInfo, trying progressively looser
+        // matches. Shared by initial window resolution and the post-scan re-resolve.
+        public AppInfo? resolve_app_for_id(string app_id) {
+            string icon_name = app_id.down();
+            AppInfo? app_info = get_app_info(app_id);
+            if (app_info == null) {
+                app_info = get_app_info(app_id + ".desktop");
+            }
+            if (app_info == null) {
+                foreach (var app in installed_apps_list) {
+                    string? raw_id = app.get_id();
+                    if (raw_id == null) continue;
+                    string id = raw_id.down();
+                    if (id.contains(icon_name) || icon_name.contains(id)) {
+                        app_info = app;
+                        break;
+                    }
+                }
+            }
+            if (app_info == null) {
+                foreach (var app in installed_apps_list) {
+                    var dapp = app as GLib.DesktopAppInfo;
+                    if (dapp == null) continue;
+                    string? wm = dapp.get_startup_wm_class();
+                    if (wm != null && wm.down() == icon_name) {
+                        app_info = app;
+                        break;
+                    }
+                }
+            }
+            if (app_info == null) {
+                AppInfo? best = null;
+                int best_len = 0;
+                foreach (var app in installed_apps_list) {
+                    string? rid = app.get_id();
+                    if (rid == null) continue;
+                    string stem = rid.down();
+                    if (stem.has_suffix(".desktop")) stem = stem[0:stem.length - 8];
+                    int dot = stem.last_index_of(".");
+                    if (dot >= 0) stem = stem[dot + 1:stem.length];
+                    if (stem.length >= 4 && icon_name.has_prefix(stem) && stem.length > best_len) {
+                        best = app;
+                        best_len = stem.length;
+                    }
+                }
+                app_info = best;
+            }
+            return app_info;
+        }
+
+        private static string icon_name_for(AppInfo app_info, string fallback) {
+            var icon = app_info.get_icon();
+            if (icon != null && icon is ThemedIcon) {
+                var names = ((ThemedIcon)icon).get_names();
+                if (names != null && names.length > 0) return names[0].dup();
+            }
+            return fallback;
+        }
+
+        // Windows open before scan_apps populated the app list resolve with a null
+        // gicon. The dock re-resolves on refresh, but the overview/alt-tab read
+        // win.gicon directly, so re-resolve them once the app list is ready.
+        private void reresolve_window_icons() {
+            foreach (var win in windows) {
+                if (win.gicon != null) continue;
+                var app_info = resolve_app_for_id(win.app_id);
+                if (app_info == null) continue;
+                win.gicon = app_info.get_icon();
+                win.icon_name = icon_name_for(app_info, win.icon_name);
+            }
+        }
+
         private void add_running_app(void* handle, string raw_app_id) {
             foreach (var w in windows) {
                 if (w.handle == handle) return;
@@ -914,50 +986,14 @@ namespace Singularity {
             }
             string original_id = app_id;
             string icon_name = app_id.down();
-            AppInfo? app_info = get_app_info(app_id);
-
-            if (app_info == null) {
-                app_info = get_app_info(app_id + ".desktop");
-            }
-
-            if (app_info == null) {
-                foreach (var app in installed_apps_list) {
-                    string? raw_id = app.get_id();
-                    if (raw_id == null) continue;
-                    string id = raw_id.down();
-                    if (id.contains(icon_name) || icon_name.contains(id)) {
-                        app_info = app;
-                        break;
-                    }
-                }
-            }
-
-            // StartupWMClass fallback: handles rDNN renames where the Wayland
-            // app_id no longer matches the .desktop filename (e.g. dev.sinty.*
-            // apps installed as org.singularity.* and vice-versa).
-            if (app_info == null) {
-                foreach (var app in installed_apps_list) {
-                    var dapp = app as GLib.DesktopAppInfo;
-                    if (dapp == null) continue;
-                    string? wm = dapp.get_startup_wm_class();
-                    if (wm != null && wm.down() == icon_name) {
-                        app_info = app;
-                        message("AppSystem: Resolved '%s' via StartupWMClass, '%s'", original_id, app.get_id());
-                        break;
-                    }
-                }
-            }
+            AppInfo? app_info = resolve_app_for_id(app_id);
 
             if (app_info != null) {
                 string? canonical_id = app_info.get_id();
                 if (canonical_id != null) {
                     app_id = canonical_id.dup();
                 }
-                var icon = app_info.get_icon();
-                if (icon != null && icon is ThemedIcon) {
-                    var names = ((ThemedIcon)icon).get_names();
-                    if (names != null && names.length > 0) icon_name = names[0].dup();
-                }
+                icon_name = icon_name_for(app_info, icon_name);
             } else {
                 warning("AppSystem: FAILED to resolve AppInfo for '%s'. Dock icon may be missing or generic.", original_id);
             }
@@ -1149,6 +1185,7 @@ namespace Singularity {
                 }
             }
             scan_desktop_app_dirs();
+            reresolve_window_icons();
             apps_changed();
         }
 
