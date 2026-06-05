@@ -160,6 +160,45 @@ xo_proto_h = custom_target(
   input: xo_proto_xml,
   command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@']
 )
+eftl_proto_xml = 'protocols/ext-foreign-toplevel-list-v1.xml'
+eftl_proto_c = custom_target(
+  'ext-foreign-toplevel-list-v1-protocol.c',
+  output: 'ext-foreign-toplevel-list-v1-protocol.c',
+  input: eftl_proto_xml,
+  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@']
+)
+eftl_proto_h = custom_target(
+  'ext-foreign-toplevel-list-v1-client-protocol.h',
+  output: 'ext-foreign-toplevel-list-v1-client-protocol.h',
+  input: eftl_proto_xml,
+  command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@']
+)
+eis_proto_xml = 'protocols/ext-image-capture-source-v1.xml'
+eis_proto_c = custom_target(
+  'ext-image-capture-source-v1-protocol.c',
+  output: 'ext-image-capture-source-v1-protocol.c',
+  input: eis_proto_xml,
+  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@']
+)
+eis_proto_h = custom_target(
+  'ext-image-capture-source-v1-client-protocol.h',
+  output: 'ext-image-capture-source-v1-client-protocol.h',
+  input: eis_proto_xml,
+  command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@']
+)
+eic_proto_xml = 'protocols/ext-image-copy-capture-v1.xml'
+eic_proto_c = custom_target(
+  'ext-image-copy-capture-v1-protocol.c',
+  output: 'ext-image-copy-capture-v1-protocol.c',
+  input: eic_proto_xml,
+  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@']
+)
+eic_proto_h = custom_target(
+  'ext-image-copy-capture-v1-client-protocol.h',
+  output: 'ext-image-copy-capture-v1-client-protocol.h',
+  input: eic_proto_xml,
+  command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@']
+)
 sb_proto_xml = 'protocols/singularity-blur-unstable-v1.xml'
 sb_proto_c = custom_target(
   'singularity-blur-unstable-v1-protocol.c',
@@ -335,7 +374,8 @@ executable('singularity-keyboard-reset',
   install: true
 )
 executable('singularity-screenshot',
-  sources: ['src/tools/screenshot/main.c', sc_proto_c, sc_proto_h, xo_proto_c, xo_proto_h],
+  sources: ['src/tools/screenshot/main.c', sc_proto_c, sc_proto_h, xo_proto_c, xo_proto_h,
+            eftl_proto_c, eftl_proto_h, eis_proto_c, eis_proto_h, eic_proto_c, eic_proto_h],
   dependencies: [
     dependency('wayland-client'),
     dependency('libpng'),

@@ -17,6 +17,8 @@
 #include <wayland-client.h>
 #include "wlr-screencopy-unstable-v1-client-protocol.h"
 #include "xdg-output-unstable-v1-client-protocol.h"
+#include "ext-image-capture-source-v1-client-protocol.h"
+#include "ext-image-copy-capture-v1-client-protocol.h"
 
 #define MAX_OUTPUTS 16
 
@@ -37,6 +39,8 @@ typedef struct {
     struct wl_shm                     *shm;
     struct zwlr_screencopy_manager_v1 *screencopy;
     struct zxdg_output_manager_v1     *xdg_output_manager;
+    struct ext_output_image_capture_source_manager_v1 *ext_source_mgr;
+    struct ext_image_copy_capture_manager_v1          *ext_capture_mgr;
     Output   outputs[MAX_OUTPUTS];
     int      n_outputs;
 } State;
@@ -149,6 +153,120 @@ static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
     .buffer_done  = frame_ev_buffer_done,
 };
 
+typedef struct {
+    Frame *f;
+    int    session_done;
+} ExtCtx;
+
+static void ext_session_buffer_size(void *data,
+    struct ext_image_copy_capture_session_v1 *s, uint32_t w, uint32_t h)
+{
+    (void)s; Frame *f = ((ExtCtx *)data)->f;
+    f->width = w; f->height = h;
+}
+
+static void ext_session_shm_format(void *data,
+    struct ext_image_copy_capture_session_v1 *s, uint32_t format)
+{
+    (void)s; Frame *f = ((ExtCtx *)data)->f;
+    if (format == WL_SHM_FORMAT_ARGB8888 || format == WL_SHM_FORMAT_XRGB8888)
+        f->format = format;
+    else if (!f->shm_received)
+        f->format = format;
+    f->shm_received = 1;
+}
+
+static void ext_session_dmabuf_device(void *data,
+    struct ext_image_copy_capture_session_v1 *s, struct wl_array *dev) { (void)data; (void)s; (void)dev; }
+static void ext_session_dmabuf_format(void *data,
+    struct ext_image_copy_capture_session_v1 *s, uint32_t fmt, struct wl_array *mods) { (void)data; (void)s; (void)fmt; (void)mods; }
+
+static void ext_session_done(void *data, struct ext_image_copy_capture_session_v1 *s) {
+    (void)s; ((ExtCtx *)data)->session_done = 1;
+}
+static void ext_session_stopped(void *data, struct ext_image_copy_capture_session_v1 *s) {
+    (void)s; ExtCtx *c = data; c->session_done = 1; c->f->done = -1;
+}
+
+static const struct ext_image_copy_capture_session_v1_listener ext_session_listener = {
+    .buffer_size   = ext_session_buffer_size,
+    .shm_format    = ext_session_shm_format,
+    .dmabuf_device = ext_session_dmabuf_device,
+    .dmabuf_format = ext_session_dmabuf_format,
+    .done          = ext_session_done,
+    .stopped       = ext_session_stopped,
+};
+
+static void ext_frame_transform(void *data,
+    struct ext_image_copy_capture_frame_v1 *fr, uint32_t transform) { (void)data; (void)fr; (void)transform; }
+static void ext_frame_damage(void *data, struct ext_image_copy_capture_frame_v1 *fr,
+    int32_t x, int32_t y, int32_t w, int32_t h) { (void)data; (void)fr; (void)x; (void)y; (void)w; (void)h; }
+static void ext_frame_presentation_time(void *data, struct ext_image_copy_capture_frame_v1 *fr,
+    uint32_t hi, uint32_t lo, uint32_t ns) { (void)data; (void)fr; (void)hi; (void)lo; (void)ns; }
+static void ext_frame_ready(void *data, struct ext_image_copy_capture_frame_v1 *fr) {
+    (void)fr; ((ExtCtx *)data)->f->done = 1;
+}
+static void ext_frame_failed(void *data, struct ext_image_copy_capture_frame_v1 *fr, uint32_t reason) {
+    (void)fr; (void)reason; ((ExtCtx *)data)->f->done = -1;
+}
+
+static const struct ext_image_copy_capture_frame_v1_listener ext_frame_listener = {
+    .transform         = ext_frame_transform,
+    .damage            = ext_frame_damage,
+    .presentation_time = ext_frame_presentation_time,
+    .ready             = ext_frame_ready,
+    .failed            = ext_frame_failed,
+};
+
+static int capture_output_ext(State *state, Output *out, int cursor, Frame *f) {
+    if (!state->ext_source_mgr || !state->ext_capture_mgr) return -1;
+
+    memset(f, 0, sizeof(*f));
+    f->state = state;
+    f->fd = -1;
+    ExtCtx ctx = { .f = f, .session_done = 0 };
+
+    struct ext_image_capture_source_v1 *src =
+        ext_output_image_capture_source_manager_v1_create_source(state->ext_source_mgr, out->wl);
+    uint32_t opts = cursor ? EXT_IMAGE_COPY_CAPTURE_MANAGER_V1_OPTIONS_PAINT_CURSORS : 0;
+    struct ext_image_copy_capture_session_v1 *sess =
+        ext_image_copy_capture_manager_v1_create_session(state->ext_capture_mgr, src, opts);
+    ext_image_copy_capture_session_v1_add_listener(sess, &ext_session_listener, &ctx);
+    wl_display_flush(state->display);
+
+    int rc = -1;
+    struct ext_image_copy_capture_frame_v1 *frame = NULL;
+
+    while (!ctx.session_done && f->done == 0)
+        if (wl_display_dispatch(state->display) < 0) goto out;
+
+    if (f->done == -1 || f->width == 0 || f->height == 0) goto out;
+
+    f->stride = f->width * 4;
+    f->bgr_order = (f->format == 0x34324258 || f->format == 0x34324241);
+    f->buffer = alloc_shm_buffer(f);
+    if (!f->buffer) goto out;
+
+    frame = ext_image_copy_capture_session_v1_create_frame(sess);
+    ext_image_copy_capture_frame_v1_add_listener(frame, &ext_frame_listener, &ctx);
+    ext_image_copy_capture_frame_v1_attach_buffer(frame, f->buffer);
+    ext_image_copy_capture_frame_v1_damage_buffer(frame, 0, 0, (int32_t)f->width, (int32_t)f->height);
+    ext_image_copy_capture_frame_v1_capture(frame);
+    wl_display_flush(state->display);
+
+    while (f->done == 0)
+        if (wl_display_dispatch(state->display) < 0) break;
+
+    f->flags = 0;
+    rc = (f->done == 1) ? 0 : -1;
+
+out:
+    if (frame) ext_image_copy_capture_frame_v1_destroy(frame);
+    ext_image_copy_capture_session_v1_destroy(sess);
+    ext_image_capture_source_v1_destroy(src);
+    return rc;
+}
+
 /* ── wl_output listeners ──────────────────────────────────────────────────── */
 
 static void output_geometry(void *data, struct wl_output *wl,
@@ -250,6 +368,12 @@ static void registry_global(void *data, struct wl_registry *reg,
     } else if (strcmp(iface, zxdg_output_manager_v1_interface.name) == 0) {
         s->xdg_output_manager = wl_registry_bind(reg, name,
             &zxdg_output_manager_v1_interface, version < 3 ? version : 3);
+    } else if (strcmp(iface, ext_output_image_capture_source_manager_v1_interface.name) == 0) {
+        s->ext_source_mgr = wl_registry_bind(reg, name,
+            &ext_output_image_capture_source_manager_v1_interface, 1);
+    } else if (strcmp(iface, ext_image_copy_capture_manager_v1_interface.name) == 0) {
+        s->ext_capture_mgr = wl_registry_bind(reg, name,
+            &ext_image_copy_capture_manager_v1_interface, 1);
     } else if (strcmp(iface, wl_output_interface.name) == 0 && s->n_outputs < MAX_OUTPUTS) {
         Output *o = &s->outputs[s->n_outputs++];
         memset(o, 0, sizeof(*o));
@@ -351,18 +475,27 @@ static int do_capture(State *state, struct zwlr_screencopy_frame_v1 *frame_obj, 
 
 /* ── Capture variants ─────────────────────────────────────────────────────── */
 
-static int capture_output(State *state, Output *out, int cursor, const char *path) {
+static int capture_one(State *state, Output *out, int cursor, Frame *f) {
+    if (capture_output_ext(state, out, cursor, f) == 0)
+        return 0;
+    frame_cleanup(f);
+    if (!state->screencopy) return -1;
     struct zwlr_screencopy_frame_v1 *fo =
         zwlr_screencopy_manager_v1_capture_output(state->screencopy, cursor, out->wl);
+    int rc = do_capture(state, fo, f);
+    zwlr_screencopy_frame_v1_destroy(fo);
+    return rc;
+}
+
+static int capture_output(State *state, Output *out, int cursor, const char *path) {
     Frame f;
-    int rc = do_capture(state, fo, &f);
+    int rc = capture_one(state, out, cursor, &f);
     if (rc == 0) {
         int inv = (f.flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT) != 0;
         rc = write_png_bgra(path, f.data, f.width, f.height, f.stride, inv, f.bgr_order);
     } else {
         fprintf(stderr, "capture failed for output %s\n", out->name);
     }
-    zwlr_screencopy_frame_v1_destroy(fo);
     frame_cleanup(&f);
     return rc;
 }
@@ -387,21 +520,56 @@ static int capture_region(State *state,
     }
     if (!tgt) tgt = &state->outputs[0];
 
-    /* Translate global coords to output-local logical coordinates */
-    struct zwlr_screencopy_frame_v1 *fo =
-        zwlr_screencopy_manager_v1_capture_output_region(
-            state->screencopy, cursor, tgt->wl,
-            gx - tgt->x, gy - tgt->y, gw, gh);
-    Frame f;
-    int rc = do_capture(state, fo, &f);
-    if (rc == 0) {
-        int inv = (f.flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT) != 0;
-        rc = write_png_bgra(path, f.data, f.width, f.height, f.stride, inv, f.bgr_order);
-    } else {
-        fprintf(stderr, "region capture failed\n");
+    if (state->screencopy) {
+        struct zwlr_screencopy_frame_v1 *fo =
+            zwlr_screencopy_manager_v1_capture_output_region(
+                state->screencopy, cursor, tgt->wl,
+                gx - tgt->x, gy - tgt->y, gw, gh);
+        Frame f;
+        int rc = do_capture(state, fo, &f);
+        zwlr_screencopy_frame_v1_destroy(fo);
+        if (rc == 0) {
+            int inv = (f.flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT) != 0;
+            rc = write_png_bgra(path, f.data, f.width, f.height, f.stride, inv, f.bgr_order);
+            frame_cleanup(&f);
+            return rc;
+        }
+        frame_cleanup(&f);
     }
-    zwlr_screencopy_frame_v1_destroy(fo);
-    frame_cleanup(&f);
+
+    Frame ef;
+    if (capture_one(state, tgt, cursor, &ef) != 0) {
+        fprintf(stderr, "region capture failed\n");
+        frame_cleanup(&ef);
+        return -1;
+    }
+    int scale = tgt->scale > 0 ? tgt->scale : 1;
+    if (ef.width > 0 && tgt->logical_w > 0) scale = (int)(ef.width / tgt->logical_w);
+    if (scale < 1) scale = 1;
+    int32_t px = (gx - tgt->x) * scale;
+    int32_t py = (gy - tgt->y) * scale;
+    if (px < 0) px = 0;
+    if (py < 0) py = 0;
+    uint32_t pw = (uint32_t)gw * scale;
+    uint32_t ph = (uint32_t)gh * scale;
+    if ((uint32_t)px + pw > ef.width)  pw = ef.width  > (uint32_t)px ? ef.width  - (uint32_t)px : 0;
+    if ((uint32_t)py + ph > ef.height) ph = ef.height > (uint32_t)py ? ef.height - (uint32_t)py : 0;
+    if (pw == 0 || ph == 0) {
+        fprintf(stderr, "region outside output\n");
+        frame_cleanup(&ef);
+        return -1;
+    }
+    uint32_t cstride = pw * 4;
+    uint8_t *crop = malloc((size_t)cstride * ph);
+    if (!crop) { frame_cleanup(&ef); return -1; }
+    for (uint32_t row = 0; row < ph; row++) {
+        memcpy(crop + (size_t)row * cstride,
+               (const uint8_t *)ef.data + (size_t)(py + row) * ef.stride + (size_t)px * 4,
+               cstride);
+    }
+    int rc = write_png_bgra(path, crop, pw, ph, cstride, 0, ef.bgr_order);
+    free(crop);
+    frame_cleanup(&ef);
     return rc;
 }
 
@@ -410,19 +578,14 @@ static int capture_all(State *state, int cursor, const char *path) {
     if (n == 0) { fprintf(stderr, "no outputs\n"); return -1; }
     if (n == 1) return capture_output(state, &state->outputs[0], cursor, path);
 
-    struct zwlr_screencopy_frame_v1 *fobjs[MAX_OUTPUTS];
     Frame frames[MAX_OUTPUTS];
     memset(frames, 0, sizeof(frames));
 
     for (int i = 0; i < n; i++) {
-        fobjs[i] = zwlr_screencopy_manager_v1_capture_output(
-            state->screencopy, cursor, state->outputs[i].wl);
-        if (do_capture(state, fobjs[i], &frames[i]) < 0) {
+        if (capture_one(state, &state->outputs[i], cursor, &frames[i]) < 0) {
             fprintf(stderr, "capture failed for output %d\n", i);
-            for (int j = 0; j <= i; j++) {
-                zwlr_screencopy_frame_v1_destroy(fobjs[j]);
+            for (int j = 0; j <= i; j++)
                 frame_cleanup(&frames[j]);
-            }
             return -1;
         }
     }
@@ -445,10 +608,8 @@ static int capture_all(State *state, int cursor, const char *path) {
     uint32_t canvas_stride = total_w * 4;
     uint8_t *canvas = calloc(total_h, canvas_stride);
     if (!canvas) {
-        for (int i = 0; i < n; i++) {
-            zwlr_screencopy_frame_v1_destroy(fobjs[i]);
+        for (int i = 0; i < n; i++)
             frame_cleanup(&frames[i]);
-        }
         return -1;
     }
 
@@ -469,10 +630,8 @@ static int capture_all(State *state, int cursor, const char *path) {
     int canvas_bgr = (n > 0) ? frames[0].bgr_order : 0;
     int rc = write_png_bgra(path, canvas, total_w, total_h, canvas_stride, 0, canvas_bgr);
     free(canvas);
-    for (int i = 0; i < n; i++) {
-        zwlr_screencopy_frame_v1_destroy(fobjs[i]);
+    for (int i = 0; i < n; i++)
         frame_cleanup(&frames[i]);
-    }
     return rc;
 }
 
@@ -523,7 +682,8 @@ int main(int argc, char *argv[]) {
         wl_display_roundtrip(display); /* flush xdg-output events */
     }
 
-    if (!state.shm || !state.screencopy || state.n_outputs == 0) {
+    int have_ext = state.ext_source_mgr && state.ext_capture_mgr;
+    if (!state.shm || state.n_outputs == 0 || (!state.screencopy && !have_ext)) {
         fprintf(stderr, "required Wayland interfaces not available\n");
         wl_display_disconnect(display);
         return 1;
@@ -559,7 +719,9 @@ int main(int argc, char *argv[]) {
         wl_output_destroy(state.outputs[i].wl);
     }
     if (state.xdg_output_manager) zxdg_output_manager_v1_destroy(state.xdg_output_manager);
-    zwlr_screencopy_manager_v1_destroy(state.screencopy);
+    if (state.ext_capture_mgr) ext_image_copy_capture_manager_v1_destroy(state.ext_capture_mgr);
+    if (state.ext_source_mgr) ext_output_image_capture_source_manager_v1_destroy(state.ext_source_mgr);
+    if (state.screencopy) zwlr_screencopy_manager_v1_destroy(state.screencopy);
     wl_shm_destroy(state.shm);
     wl_registry_destroy(registry);
     wl_display_disconnect(display);
