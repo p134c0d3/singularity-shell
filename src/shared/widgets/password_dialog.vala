@@ -10,7 +10,13 @@ namespace Singularity {
         public signal void response(bool accepted);
 
         public WifiPasswordDialog(string ssid) {
-            Object(application: (Gtk.Application) GLib.Application.get_default());
+            Object(
+                application:   (Gtk.Application) GLib.Application.get_default(),
+                anchor_top:    true,
+                anchor_bottom: true,
+                anchor_left:   true,
+                anchor_right:  true
+            );
 
             add_css_class("wifi-password-dialog");
 
