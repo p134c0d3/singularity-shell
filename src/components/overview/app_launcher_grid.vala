@@ -1064,6 +1064,10 @@ namespace Singularity {
                 if (on_app_launched != null) on_app_launched();
             });
 
+            menu.add_item("Add to Desktop", "user-desktop-symbolic", () => {
+                AppSystem.add_app_to_desktop(app);
+            });
+
             menu.add_separator();
 
             if (alt_pressed) {

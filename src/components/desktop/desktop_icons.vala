@@ -284,7 +284,9 @@ namespace Singularity {
             icon_widget.pixel_size = ICON_SIZE;
             string content_type = info.get_content_type() ?? "";
             string? path = file.get_path();
-            if (content_type.has_prefix("image/") && path != null) {
+            if (content_type == "application/x-desktop" && path != null
+                && set_icon_from_desktop_entry(icon_widget, path)) {
+            } else if (content_type.has_prefix("image/") && path != null) {
                 uint64 mtime = info.get_attribute_uint64("time::modified");
                 string cache_key = path + ":" + mtime.to_string();
                 Gdk.Pixbuf? cached = _icon_pixbuf_cache.lookup(cache_key);
@@ -369,6 +371,26 @@ namespace Singularity {
                 string? old_key = _icon_pixbuf_cache_order.pop_head();
                 if (old_key != null) _icon_pixbuf_cache.remove(old_key);
             }
+        }
+
+        private bool set_icon_from_desktop_entry(Image icon_widget, string path) {
+            var entry = new GLib.DesktopAppInfo.from_filename(path);
+            if (entry == null) return false;
+            var gicon = entry.get_icon();
+            if (gicon == null) return false;
+            if (gicon is ThemedIcon) {
+                var display = Gdk.Display.get_default();
+                var theme = (display != null) ? Gtk.IconTheme.get_for_display(display) : null;
+                foreach (var name in ((ThemedIcon) gicon).get_names()) {
+                    if (theme != null && theme.has_icon(name)) {
+                        icon_widget.icon_name = name;
+                        return true;
+                    }
+                }
+                return false;
+            }
+            icon_widget.set_from_gicon(gicon);
+            return true;
         }
 
         private void set_icon_from_info(Image icon_widget, FileInfo info) {

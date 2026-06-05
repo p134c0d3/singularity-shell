@@ -319,6 +319,26 @@ namespace Singularity {
             return false;
         }
 
+        public static bool add_app_to_desktop(AppInfo app) {
+            var entry = app as DesktopAppInfo;
+            string? src = (entry != null) ? entry.get_filename() : null;
+            if (src == null) return false;
+            string desktop_dir = Environment.get_user_special_dir(UserDirectory.DESKTOP)
+                ?? Path.build_filename(Environment.get_home_dir(), "Desktop");
+            try {
+                var dir = File.new_for_path(desktop_dir);
+                if (!dir.query_exists()) dir.make_directory_with_parents();
+                var dest = dir.get_child(Path.get_basename(src));
+                File.new_for_path(src).copy(dest, FileCopyFlags.OVERWRITE);
+                string? dpath = dest.get_path();
+                if (dpath != null) FileUtils.chmod(dpath, 0755);
+                return true;
+            } catch (Error e) {
+                warning("Failed to add app to desktop: %s", e.message);
+                return false;
+            }
+        }
+
         private static void on_workspace_created(void* handle, string name, void* data) {
             var self = (AppSystem)data;
             foreach (var ws in self.workspaces) {
