@@ -121,14 +121,11 @@ namespace Singularity {
                 Widget? child = icon_container.get_first_child();
                 while (child != null) {
                     var box = child as Box;
-                    if (box != null) {
-                        var label = box.get_last_child() as Label;
-                        if (label != null && label.label == filename) {
-                            icon_container.move(child, snap_x, snap_y);
-                            icon_positions.insert(filename, new IconPosition(snap_x, snap_y));
-                            save_positions();
-                            return true;
-                        }
+                    if (box != null && box.get_data<string>("filename") == filename) {
+                        icon_container.move(child, snap_x, snap_y);
+                        icon_positions.insert(filename, new IconPosition(snap_x, snap_y));
+                        save_positions();
+                        return true;
                     }
                     child = child.get_next_sibling();
                 }
@@ -159,9 +156,9 @@ namespace Singularity {
                         icon_container.move(child, new_x, new_y);
                         var box = child as Box;
                         if (box != null) {
-                            var label = box.get_last_child() as Label;
-                            if (label != null) {
-                                icon_positions.insert(label.label, new IconPosition(new_x, new_y));
+                            string? fn = box.get_data<string>("filename");
+                            if (fn != null) {
+                                icon_positions.insert(fn, new IconPosition(new_x, new_y));
                             }
                         }
                         return;
@@ -245,8 +242,10 @@ namespace Singularity {
                 var desktop = File.new_for_path(desktop_path);
                 if (!desktop.query_exists()) return;
                 var enumerator = desktop.enumerate_children("standard::*,time::modified", FileQueryInfoFlags.NONE);
-                int default_x = 24;
-                int default_y = 48;
+                var used = new HashTable<string, bool>(str_hash, str_equal);
+                icon_positions.foreach((n, p) => {
+                    if (p != null) used.insert("%d,%d".printf(p.x, p.y), true);
+                });
                 FileInfo? info;
                 while ((info = enumerator.next_file()) != null) {
                     string name = info.get_display_name();
@@ -258,15 +257,15 @@ namespace Singularity {
                         x = saved_pos.x;
                         y = saved_pos.y;
                     } else {
-                        x = default_x;
-                        y = default_y;
-                        icon_positions.insert(name, new IconPosition(x, y));
-                        default_y += GRID_SIZE;
-                        if (default_y > 800) {
-                            default_y = 48;
-                            default_x += GRID_SIZE;
+                        x = 24;
+                        y = 48;
+                        while (used.contains("%d,%d".printf(x, y))) {
+                            y += GRID_SIZE;
+                            if (y > 800) { y = 48; x += GRID_SIZE; }
                         }
+                        icon_positions.insert(name, new IconPosition(x, y));
                     }
+                    used.insert("%d,%d".printf(x, y), true);
                     add_icon(file, info, x, y);
                 }
                 save_positions();
@@ -280,6 +279,7 @@ namespace Singularity {
             item.add_css_class("desktop-icon");
             item.halign = Align.CENTER;
             item.set_size_request(ICON_WIDTH, ICON_HEIGHT);
+            item.set_data<string>("filename", info.get_display_name());
             var icon_widget = new Image();
             icon_widget.pixel_size = ICON_SIZE;
             string content_type = info.get_content_type() ?? "";
@@ -307,7 +307,15 @@ namespace Singularity {
                 set_icon_from_info(icon_widget, info);
             }
             item.append(icon_widget);
-            var label = new Label(info.get_display_name());
+            string label_text = info.get_display_name();
+            if (content_type == "application/x-desktop" && path != null) {
+                var entry = new GLib.DesktopAppInfo.from_filename(path);
+                if (entry != null) {
+                    string? dn = entry.get_display_name();
+                    if (dn != null && dn != "") label_text = dn;
+                }
+            }
+            var label = new Label(label_text);
             label.max_width_chars = 12;
             label.ellipsize = Pango.EllipsizeMode.END;
             label.wrap = true;
@@ -464,11 +472,18 @@ namespace Singularity {
             menu.add_item("Move to Trash", "user-trash-symbolic", () => {
                 try {
                     file.trash();
-                    icon_positions.remove(info.get_display_name());
-                    save_positions();
                 } catch (Error e) {
-                    warning("Failed to trash: %s", e.message);
+                    warning("Failed to trash, deleting instead: %s", e.message);
+                    try {
+                        file.delete();
+                    } catch (Error e2) {
+                        warning("Failed to delete: %s", e2.message);
+                        return;
+                    }
                 }
+                icon_positions.remove(info.get_display_name());
+                save_positions();
+                load_desktop_icons();
             });
             menu.popup();
         }
