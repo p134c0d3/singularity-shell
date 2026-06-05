@@ -483,7 +483,7 @@ namespace Singularity {
                 }
                 icon_positions.remove(info.get_display_name());
                 save_positions();
-                load_desktop_icons();
+                icon_container.remove(widget);
             });
             menu.popup();
         }
