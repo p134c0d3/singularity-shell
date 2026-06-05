@@ -133,9 +133,21 @@ namespace Singularity {
             search_manager.results_updated.connect(update_search_results);
 
             var key_controller = new EventControllerKey();
+            key_controller.set_propagation_phase(PropagationPhase.CAPTURE);
             key_controller.key_pressed.connect((keyval, keycode, state) => {
                 if (keyval == Gdk.Key.Escape) {
                     toggle();
+                    return true;
+                }
+                if ((keyval == Gdk.Key.Return || keyval == Gdk.Key.KP_Enter) &&
+                    content_stack.visible_child_name == "search") {
+                    var row = search_results_list.get_selected_row();
+                    if (row == null) row = search_results_list.get_row_at_index(0);
+                    var res_row = row as SearchResultRow;
+                    if (res_row != null) {
+                        res_row.result.activate();
+                        toggle();
+                    }
                     return true;
                 }
                 return false;
@@ -236,6 +248,8 @@ namespace Singularity {
             foreach (var res in results) {
                 search_results_list.append(new SearchResultRow(res));
             }
+            var first = search_results_list.get_row_at_index(0);
+            if (first != null) search_results_list.select_row(first);
         }
 
         public void toggle() {

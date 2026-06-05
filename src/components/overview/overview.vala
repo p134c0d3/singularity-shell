@@ -99,6 +99,18 @@ namespace Singularity {
                     return true;
                 }
 
+                if ((keyval == Gdk.Key.Return || keyval == Gdk.Key.KP_Enter) &&
+                    search_entry.text.strip() != "") {
+                    var row = search_results_list.get_selected_row();
+                    if (row == null) row = search_results_list.get_row_at_index(0);
+                    var res_row = row as SearchResultRow;
+                    if (res_row != null) {
+                        res_row.result.activate();
+                        toggle();
+                    }
+                    return true;
+                }
+
                 // Printable characters (non-nav), redirect to search entry -
                 // BUT only when the focus is on a non-editable widget. If
                 // the user is typing inside an overview widget (notes
