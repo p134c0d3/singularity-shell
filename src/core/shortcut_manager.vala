@@ -74,6 +74,9 @@ namespace Singularity {
             settings.changed["xkb-variant"].connect(() => {
                 write_labwc_rc_xml();
             });
+            settings.changed["force-ssd"].connect(() => {
+                write_labwc_rc_xml();
+            });
             if (wm_settings != null) {
                 wm_settings.changed["button-layout"].connect(() => {
                     write_labwc_rc_xml();
@@ -213,9 +216,12 @@ namespace Singularity {
             xml.append("    </titlebar>\n");
             xml.append("  </theme>\n");
 
-            // Force client-side decorations globally so GTK windows get their
-            // custom borders/shadows instead of labwc's SSD titlebar.
-            xml.append("  <core>\n    <decoration>client</decoration>\n  </core>\n");
+            // Decoration mode follows the force-ssd preference: client-side by
+            // default (GTK windows draw their own borders and hover controls),
+            // server-side when the user opts into labwc's SSD titlebar.
+            bool force_ssd = settings.get_boolean("force-ssd");
+            xml.append_printf("  <core>\n    <decoration>%s</decoration>\n  </core>\n",
+                force_ssd ? "server" : "client");
 
             // Keyboard layout (xkb)
             xml.append("  <keyboard>\n");
