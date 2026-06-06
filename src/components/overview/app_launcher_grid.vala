@@ -833,6 +833,13 @@ namespace Singularity {
                 if (ov == null) {
                     ov = new AppFolderOverlay(gtk_app, fid);
                     ov.on_app_launched = () => { if (on_app_launched != null) on_app_launched(); };
+                    // The overlay destroys itself on close, so drop it from the
+                    // cache (otherwise it can't be reopened) and hand keyboard
+                    // focus back to the grid so Esc closes the drawer next.
+                    ov.closed.connect(() => {
+                        _folder_overlays.remove(fid);
+                        grab_focus();
+                    });
                     _folder_overlays.insert(fid, ov);
                 }
                 ov.open_overlay();
@@ -882,9 +889,12 @@ namespace Singularity {
             box.append(img);
 
             var label = new Label(app.get_name());
-            label.max_width_chars = 11;
+            label.max_width_chars = 14;
             label.ellipsize = Pango.EllipsizeMode.END;
-            label.wrap = false;
+            label.wrap = true;
+            label.wrap_mode = Pango.WrapMode.WORD_CHAR;
+            label.lines = 2;
+            label.justify = Justification.CENTER;
             label.xalign = 0.5f;
             box.append(label);
 
