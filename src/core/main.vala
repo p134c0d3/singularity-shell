@@ -60,7 +60,6 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
     protected override void activate() {
         // Ensure Qt apps use the Wayland backend instead of XCB
         Environment.set_variable("QT_QPA_PLATFORM", "wayland", false);
-        Environment.set_variable("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1", false);
 
         // SIGUSR1 = restart: exit cleanly so the wrapper script restarts us
         GLib.Unix.signal_add(Posix.Signal.USR1, () => {
@@ -1138,13 +1137,11 @@ window.inactive.shadow.color: %s
         bool force_ssd = settings.get_boolean("force-ssd");
         if (force_ssd) {
             GLib.Environment.set_variable("GTK_CSD", "0", true);
-            // This tells Qt to use compositor decorations on Wayland
-            GLib.Environment.set_variable("QT_WAYLAND_DISABLE_WINDOWDECORATION", "0", true);
-            // Hint for libdecor usage if present
-            GLib.Environment.set_variable("QT_WAYLAND_FORCE_LIBDECOR", "1", true);
+            GLib.Environment.set_variable("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1", true);
         } else {
-            // Restore default behavior
             GLib.Environment.set_variable("GTK_CSD", "1", true);
+            GLib.Environment.set_variable("QT_WAYLAND_DISABLE_WINDOWDECORATION", "0", true);
+            GLib.Environment.set_variable("QT_WAYLAND_FORCE_LIBDECOR", "1", true);
         }
     }
 
