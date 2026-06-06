@@ -322,6 +322,8 @@ namespace Singularity {
             label.wrap_mode = Pango.WrapMode.WORD_CHAR;
             label.lines = 2;
             label.halign = Align.CENTER;
+            label.justify = Justification.CENTER;
+            label.xalign = 0.5f;
             label.add_css_class("desktop-icon-label");
             item.append(label);
             var drag_source = new DragSource();
