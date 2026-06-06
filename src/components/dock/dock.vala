@@ -1524,9 +1524,10 @@ namespace Singularity {
             if (is_running) {
                 menu.add_separator();
                 menu.add_item("Quit", "application-exit-symbolic", () => {
-                    void* focused = app_system.get_focused_window_handle();
-                    if (focused != null && app_system.is_app_running(app_id)) {
-                        Singularity.close_window(focused);
+                    // Close this app's own windows, not whatever is focused.
+                    foreach (var win in app_system.get_windows()) {
+                        if (dock_matches(win.app_id, app_id))
+                            Singularity.close_window(win.handle);
                     }
                 });
                 // Shift-held variant: expose a destructive "Force Kill" entry
@@ -1758,7 +1759,10 @@ namespace Singularity {
                 void* handle = get_window_handle_for_app(app_id);
                 if (handle != null) {
                     var focused = app_system.get_focused_window_handle();
-                    if (focused == handle || app_system.get_focused_app_id() == app_id) {
+                    // Window-level: only minimize the exact focused window;
+                    // otherwise raise/restore it. App-level matching minimized
+                    // the wrong window and broke restoring after minimize.
+                    if (focused == handle) {
                         Singularity.minimize_window(handle);
                     } else {
                         Singularity.wayland_activate_window(handle);
