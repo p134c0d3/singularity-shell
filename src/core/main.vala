@@ -55,6 +55,7 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
     private bool _push_ws_pending = false;
     public Singularity.HotCornerManager? hot_corner_manager = null;
     private Singularity.DebugHudWindow? _debug_hud = null;
+    private Singularity.DevtoolsOverlay? _devtools_overlay = null;
     private bool _goa_initialized = false;
 
     protected override void activate() {
@@ -205,6 +206,7 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
         if (!surfaces.is_claimed(Singularity.ShellRole.DOCK)) {
             dock = new Singularity.Dock(this);
             hot_corner_manager.attach_to_dock(dock);
+            Singularity.DebugManager.get_default().dock_inspect = dock;
         } else {
             activate_shell_surface(Singularity.ShellRole.DOCK);
         }
@@ -259,6 +261,17 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
             } else if (_debug_hud != null) {
                 _debug_hud.hide ();
                 _debug_hud.stop_updates ();
+            }
+        });
+
+        // DevTools overlay is created lazily the first time it's toggled on
+        dbg.notify["devtools-visible"].connect(() => {
+            if (dbg.devtools_visible) {
+                if (_devtools_overlay == null)
+                    _devtools_overlay = new Singularity.DevtoolsOverlay(this);
+                _devtools_overlay.present ();
+            } else if (_devtools_overlay != null) {
+                _devtools_overlay.hide ();
             }
         });
 

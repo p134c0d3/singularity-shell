@@ -30,6 +30,7 @@ namespace Singularity {
         /* Signal handler IDs that must be disconnected on dispose */
         private ulong _sig_dbg_mode   = 0;
         private ulong _sig_hud        = 0;
+        private ulong _sig_devtools   = 0;
         private ulong _sig_log        = 0;
 
         /* Refresh timer (only runs while page is mapped) */
@@ -72,6 +73,17 @@ namespace Singularity {
                 dbg.hud_visible = hud_switch.switch_btn.active;
             });
             debug_group.add_row (hud_switch);
+
+            var devtools_switch = new SwitchRow (_("DevTools Overlay"),
+                "Modular inspector: live values, widget tree, realtime events");
+            devtools_switch.active = dbg.devtools_visible;
+            _sig_devtools = dbg.notify["devtools-visible"].connect (() => {
+                devtools_switch.active = dbg.devtools_visible;
+            });
+            devtools_switch.switch_btn.notify["active"].connect (() => {
+                dbg.devtools_visible = devtools_switch.switch_btn.active;
+            });
+            debug_group.add_row (devtools_switch);
 
             var pin_switch = new SwitchRow (_("Keep Sidebar Open"),
                 "Prevent sidebar from closing when focus is lost");
@@ -662,6 +674,10 @@ namespace Singularity {
             if (_sig_hud != 0) {
                 GLib.SignalHandler.disconnect (dbg, _sig_hud);
                 _sig_hud = 0;
+            }
+            if (_sig_devtools != 0) {
+                GLib.SignalHandler.disconnect (dbg, _sig_devtools);
+                _sig_devtools = 0;
             }
             if (_sig_log != 0) {
                 GLib.SignalHandler.disconnect (dbg, _sig_log);
