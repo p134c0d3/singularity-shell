@@ -946,7 +946,7 @@ window.inactive.shadow.color: %s
             dark ? "#00000055" : "#00000030",
             dark ? "#00000030" : "#00000015");
         var labwc = Singularity.Compositor.LabwcBackend.get_default();
-        if (labwc.write_config("themerc", themerc)) {
+        if (labwc.write_config("themerc-override", themerc)) {
             labwc.reconfigure();
         }
     }
@@ -1186,10 +1186,11 @@ window.inactive.shadow.color: %s
         if (force_ssd) {
             GLib.Environment.set_variable("GTK_CSD", "0", true);
             GLib.Environment.set_variable("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1", true);
+            GLib.Environment.unset_variable("QT_WAYLAND_FORCE_LIBDECOR");
         } else {
-            GLib.Environment.set_variable("GTK_CSD", "1", true);
-            GLib.Environment.set_variable("QT_WAYLAND_DISABLE_WINDOWDECORATION", "0", true);
-            GLib.Environment.set_variable("QT_WAYLAND_FORCE_LIBDECOR", "1", true);
+            GLib.Environment.unset_variable("GTK_CSD");
+            GLib.Environment.unset_variable("QT_WAYLAND_DISABLE_WINDOWDECORATION");
+            GLib.Environment.unset_variable("QT_WAYLAND_FORCE_LIBDECOR");
         }
     }
 

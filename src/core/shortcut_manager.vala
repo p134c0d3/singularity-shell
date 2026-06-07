@@ -226,12 +226,7 @@ namespace Singularity {
             xml.append("    </titlebar>\n");
             xml.append("  </theme>\n");
 
-            // Decoration mode follows the force-ssd preference: client-side by
-            // default (GTK windows draw their own borders and hover controls),
-            // server-side when the user opts into labwc's SSD titlebar.
-            bool force_ssd = settings.get_boolean("force-ssd");
-            xml.append_printf("  <core>\n    <decoration>%s</decoration>\n  </core>\n",
-                force_ssd ? "server" : "client");
+            xml.append("  <core>\n    <decoration>server</decoration>\n  </core>\n");
 
             // Pointer/touchpad behaviour from settings.
             bool mouse_accel = settings.get_boolean("mouse-acceleration");
