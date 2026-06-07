@@ -81,6 +81,12 @@ namespace Singularity {
             settings.changed["force-ssd"].connect(() => {
                 write_labwc_rc_xml();
             });
+            settings.changed["mouse-acceleration"].connect(() => {
+                write_labwc_rc_xml();
+            });
+            settings.changed["natural-scrolling"].connect(() => {
+                write_labwc_rc_xml();
+            });
             if (wm_settings != null) {
                 wm_settings.changed["button-layout"].connect(() => {
                     write_labwc_rc_xml();
@@ -226,6 +232,20 @@ namespace Singularity {
             bool force_ssd = settings.get_boolean("force-ssd");
             xml.append_printf("  <core>\n    <decoration>%s</decoration>\n  </core>\n",
                 force_ssd ? "server" : "client");
+
+            // Pointer/touchpad behaviour from settings.
+            bool mouse_accel = settings.get_boolean("mouse-acceleration");
+            bool natural_scroll = settings.get_boolean("natural-scrolling");
+            string accel_profile = mouse_accel ? "adaptive" : "flat";
+            xml.append("  <libinput>\n");
+            xml.append("    <device category=\"default\">\n");
+            xml.append_printf("      <accelProfile>%s</accelProfile>\n", accel_profile);
+            xml.append("    </device>\n");
+            xml.append("    <device category=\"touchpad\">\n");
+            xml.append_printf("      <accelProfile>%s</accelProfile>\n", accel_profile);
+            xml.append_printf("      <naturalScroll>%s</naturalScroll>\n", natural_scroll ? "yes" : "no");
+            xml.append("    </device>\n");
+            xml.append("  </libinput>\n");
 
             // Keyboard layout (xkb)
             xml.append("  <keyboard>\n");

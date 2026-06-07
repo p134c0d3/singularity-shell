@@ -25,6 +25,20 @@ namespace Singularity {
             input_group = new PreferencesGroup(_("Input Sources"));
             add_group(input_group);
             refresh_input_sources(view);
+
+            var ds = new GLib.Settings("dev.sinty.desktop");
+            var pointer_group = new PreferencesGroup(_("Mouse & Touchpad"));
+            var accel_row = new SwitchRow(_("Mouse Acceleration"),
+                _("Turn off for a flat 1:1 pointer profile"),
+                ds.get_boolean("mouse-acceleration"));
+            ds.bind("mouse-acceleration", accel_row.switch_btn, "active", SettingsBindFlags.DEFAULT);
+            pointer_group.add_row(accel_row);
+            var natural_row = new SwitchRow(_("Natural Scrolling"),
+                _("Reverse the touchpad scroll direction"),
+                ds.get_boolean("natural-scrolling"));
+            ds.bind("natural-scrolling", natural_row.switch_btn, "active", SettingsBindFlags.DEFAULT);
+            pointer_group.add_row(natural_row);
+            add_group(pointer_group);
         }
 
         private void refresh_input_sources(SettingsView view) {
