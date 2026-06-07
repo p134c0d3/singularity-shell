@@ -38,11 +38,15 @@ namespace Singularity {
             if (schema_source.lookup("org.gnome.desktop.wm.preferences", true) != null) {
                 wm_settings = new GLib.Settings("org.gnome.desktop.wm.preferences");
             }
-            register_shortcut("Volume Up", "Increase volume", "<Super>Up", "volume_up");
-            register_shortcut("Volume Down", "Decrease volume", "<Super>Down", "volume_down");
+            register_shortcut("Volume Up", "Increase volume", "", "volume_up");
+            register_shortcut("Volume Down", "Decrease volume", "", "volume_down");
             register_shortcut("Mute", "Toggle mute", "<Super>m", "volume_mute");
-            register_shortcut("Brightness Up", "Increase brightness", "<Super>Right", "brightness_up");
-            register_shortcut("Brightness Down", "Decrease brightness", "<Super>Left", "brightness_down");
+            register_shortcut("Brightness Up", "Increase brightness", "", "brightness_up");
+            register_shortcut("Brightness Down", "Decrease brightness", "", "brightness_down");
+            register_shortcut("Snap Window Left", "Snap the focused window to the left half", "<Super>Left", "snap_left");
+            register_shortcut("Snap Window Right", "Snap the focused window to the right half", "<Super>Right", "snap_right");
+            register_shortcut("Snap Window Up", "Snap the focused window to the top half", "<Super>Up", "snap_up");
+            register_shortcut("Snap Window Down", "Snap the focused window to the bottom half", "<Super>Down", "snap_down");
             register_shortcut("Keyboard Light Up", "Increase keyboard backlight", "XF86KbdBrightnessUp", "kbd_brightness_up");
             register_shortcut("Keyboard Light Down", "Decrease keyboard backlight", "XF86KbdBrightnessDown", "kbd_brightness_down");
             register_shortcut("Launcher", "Open application launcher", "<Super>space", "toggle_launcher");
@@ -246,6 +250,7 @@ namespace Singularity {
             // Dynamic shortcuts from the shortcut registry
             foreach (var s in shortcuts) {
                 string key = accel_to_labwc(s.accelerator);
+                if (key == "") continue;
                 xml.append_printf("    <keybind key=\"%s\"><action name=\"Execute\"><command>%s %s</command></action></keybind>\n",
                     key, dbus_shorts, s.action_name);
             }
@@ -428,11 +433,20 @@ namespace Singularity {
                     case "screenshot_tool":     screenshot_tool_action(); break;
                     case "screenshot_region":   screenshot_region_action(); break;
                     case "screenshot_window":   screenshot_window_action(); break;
+                    case "snap_left":  snap_focused(TilingManager.SNAP_LEFT); break;
+                    case "snap_right": snap_focused(TilingManager.SNAP_RIGHT); break;
+                    case "snap_up":    snap_focused(TilingManager.SNAP_TOP); break;
+                    case "snap_down":  snap_focused(TilingManager.SNAP_BOTTOM); break;
                     default: warning("Unknown action: %s", action_name); break;
                 }
             } catch (Error e) {
                 warning("Failed to execute action %s: %s", action_name, e.message);
             }
+        }
+
+        private void snap_focused(uint snap) {
+            void* handle = AppSystem.get_default().get_focused_window_handle();
+            if (handle != null) Singularity.wayland_snap_view(handle, snap);
         }
 
         public void volume_up() throws Error {
