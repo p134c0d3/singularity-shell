@@ -17,6 +17,7 @@ namespace Singularity {
         private GLib.Settings settings;
         private Box main_box;
         private Singularity.Animation.TimedAnimation? menu_animation;
+        private bool _is_open = false;
 
         public signal void shown();
         public signal void hidden();
@@ -253,34 +254,39 @@ namespace Singularity {
         }
 
         public void toggle() {
-            if (visible && Singularity.DebugManager.get_default().overview_pinned)
+            if (_is_open && Singularity.DebugManager.get_default().overview_pinned)
                 return;
-            if (visible) {
+            if (_is_open) {
+                _is_open = false;
                 if (menu_animation != null) menu_animation.skip();
                 menu_animation = new Singularity.Animation.TimedAnimation(
-                    this, 1, 0, 140,
+                    this, opacity, 0, 140,
                     Singularity.Animation.TimedAnimation.Easing.EASE_IN_CUBIC
                 );
                 menu_animation.tick.connect(() => { opacity = menu_animation.value; });
                 menu_animation.done.connect(() => {
+                    if (_is_open) return;
                     hide();
                     if (widgets_grid != null) widgets_grid.depopulate();
                     hidden();
                 });
                 menu_animation.play();
             } else {
+                _is_open = true;
                 update_anchor();
                 apply_monitor_sizing();
                 search_entry.text = "";
                 content_stack.visible_child_name = "grid";
-                opacity = 0;
-                present();
+                if (!visible) {
+                    opacity = 0;
+                    present();
+                }
                 app_list.populate();
                 if (widgets_grid != null) widgets_grid.populate();
                 if (carousel != null) carousel.scroll_to_index(0, false);
                 if (menu_animation != null) menu_animation.skip();
                 menu_animation = new Singularity.Animation.TimedAnimation(
-                    this, 0, 1, 190,
+                    this, opacity, 1, 190,
                     Singularity.Animation.TimedAnimation.Easing.EASE_OUT_CUBIC
                 );
                 menu_animation.tick.connect(() => { opacity = menu_animation.value; });
