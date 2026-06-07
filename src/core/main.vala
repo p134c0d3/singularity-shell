@@ -1223,8 +1223,7 @@ window.inactive.shadow.color: %s
                 FileUtils.set_contents(xsettings_conf, content);
             }
 
-            // Reload xsettingsd
-            Process.spawn_command_line_async("pkill -HUP xsettingsd || xsettingsd");
+            Process.spawn_command_line_async("/bin/sh -c 'pkill -HUP xsettingsd || xsettingsd'");
         } catch (GLib.Error e) {
             warning("Could not configure xsettingsd: %s", e.message);
         }
@@ -1267,6 +1266,14 @@ window.inactive.shadow.color: %s
         // Don't keep a large herd of idle worker threads alive.
         GLib.ThreadPool.set_max_unused_threads(2);
         Environment.set_variable("GDK_BACKEND", "wayland", true);
+        if (Environment.get_variable("GSK_RENDERER") == null) {
+            var rs = GLib.SettingsSchemaSource.get_default();
+            if (rs != null && rs.lookup("dev.sinty.desktop", true) != null) {
+                string mode = new GLib.Settings("dev.sinty.desktop").get_string("rendering-mode");
+                if (mode == "hardware") Environment.set_variable("GSK_RENDERER", "gl", true);
+                else if (mode == "software") Environment.set_variable("GSK_RENDERER", "cairo", true);
+            }
+        }
         string? wayland_display = Environment.get_variable("WAYLAND_DISPLAY");
         if (wayland_display == null) {
             printerr("WARNING: WAYLAND_DISPLAY is not set!\n");

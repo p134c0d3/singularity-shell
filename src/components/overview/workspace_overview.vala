@@ -142,6 +142,12 @@ namespace Singularity {
             }
         }
 
+        private void stack_add_unique(Widget w, string name) {
+            var existing = window_stack.get_child_by_name(name);
+            if (existing != null) window_stack.remove(existing);
+            window_stack.add_named(w, name);
+        }
+
         private void cycle_viewed_workspace(int direction) {
             unowned List<AppSystem.Workspace> workspaces = app_system.get_workspaces();
             if (workspaces.length() == 0) return;
@@ -177,7 +183,7 @@ namespace Singularity {
             // Create and switch to new spread
             var spread = create_spread_widget(ws);
             string ws_id = "ws_%p".printf(ws.handle);
-            window_stack.add_named(spread, ws_id);
+            stack_add_unique(spread, ws_id);
             window_stack.set_visible_child_full(ws_id, transition);
 
             // Clean up old spreads after a delay
@@ -298,7 +304,7 @@ namespace Singularity {
             if (current_spread == null) {
                 current_spread = create_spread_widget(viewed_workspace);
                 string ws_id = "ws_%p".printf(viewed_workspace.handle);
-                window_stack.add_named(current_spread, ws_id);
+                stack_add_unique(current_spread, ws_id);
                 window_stack.set_visible_child(current_spread);
             } else {
                 populate_spread_grid(current_spread, viewed_workspace);

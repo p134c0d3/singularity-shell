@@ -110,6 +110,24 @@ namespace Singularity.SidebarPages {
                 comp_group.add_row(row);
             }
             add_group(comp_group);
+
+            var graphics_group = new PreferencesGroup(_("Graphics"));
+            var gfx_settings = new GLib.Settings("dev.sinty.desktop");
+            string[] gfx_labels = { _("Automatic"), _("Hardware acceleration"), _("Software") };
+            string[] gfx_values = { "auto", "hardware", "software" };
+            string cur_mode = gfx_settings.get_string("rendering-mode");
+            string cur_label = gfx_labels[0];
+            for (int i = 0; i < gfx_values.length; i++)
+                if (gfx_values[i] == cur_mode) cur_label = gfx_labels[i];
+            var gfx_row = new SelectionRow(_("Rendering"), gfx_labels, cur_label);
+            gfx_row.subtitle = _("Software is a safe fallback if the screen glitches or crashes. Restart to apply.");
+            gfx_row.selected.connect((val) => {
+                for (int i = 0; i < gfx_labels.length; i++)
+                    if (gfx_labels[i] == val) gfx_settings.set_string("rendering-mode", gfx_values[i]);
+            });
+            graphics_group.add_row(gfx_row);
+            add_group(graphics_group);
+
             var preview_group = new PreferencesGroup(_("Experimental"));
             var settings = new GLib.Settings("dev.sinty.desktop");
             bool preview_enabled = settings.get_boolean("preview-features-enabled");

@@ -569,11 +569,45 @@ namespace Singularity {
             double frac = topbar_strip_fraction(gdk_monitor, height_request);
             if (_last_strip_lum < 0.0 || frac != _last_frac) {
                 double lum = WallpaperManager.get_default().top_band_luminance(frac);
+                if (lum < 0.0) lum = fallback_wallpaper_luminance();
                 if (lum >= 0.0) { _last_strip_lum = lum; _last_frac = frac; }
             }
             _last_strip_light = (_last_strip_lum >= 0.0) && (_last_strip_lum > topbar_lum_threshold);
             if (_last_strip_light) add_css_class("light-bg");
             else remove_css_class("light-bg");
+        }
+
+        // Fallback used when the WallpaperManager display pixbuf is not yet
+        // available: decode the wallpaper file directly and average the whole
+        // thumbnail, as the topbar contrast did before the band-sampling change.
+        private double fallback_wallpaper_luminance() {
+            string uri = _settings.get_string("background-picture-uri");
+            if (uri == "") return -1.0;
+            string? path = GLib.File.new_for_uri(uri).get_path();
+            if (path == null) return -1.0;
+            try {
+                var pixbuf = new Gdk.Pixbuf.from_file_at_scale(path, 128, 72, true);
+                if (pixbuf.get_bits_per_sample() != 8 || pixbuf.get_n_channels() < 3) return -1.0;
+                int ch = pixbuf.get_n_channels();
+                int rs = pixbuf.get_rowstride();
+                uint8[] data = pixbuf.get_pixels_with_length();
+                int n = data.length;
+                double total = 0.0;
+                int count = 0;
+                for (int y = 0; y < pixbuf.get_height(); y++) {
+                    for (int x = 0; x < pixbuf.get_width(); x++) {
+                        int idx = y * rs + x * ch;
+                        if (idx + 2 >= n) continue;
+                        total += 0.2126 * data[idx] / 255.0
+                               + 0.7152 * data[idx + 1] / 255.0
+                               + 0.0722 * data[idx + 2] / 255.0;
+                        count++;
+                    }
+                }
+                return count > 0 ? total / count : -1.0;
+            } catch (Error e) {
+                return -1.0;
+            }
         }
 
         private Widget create_corner_hint(string corner_class) {

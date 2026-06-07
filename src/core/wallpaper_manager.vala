@@ -163,14 +163,18 @@ namespace Singularity {
             int x, y, w, h;
             if (!top_band_rect(frac, out x, out y, out w, out h)) return -1.0;
             var pb = _display_pixbuf;
+            if (pb.get_bits_per_sample() != 8) return -1.0;
             int channels = pb.get_n_channels();
+            if (channels < 3) return -1.0;
             int rowstride = pb.get_rowstride();
-            unowned uint8[] data = pb.get_pixels();
+            uint8[] data = pb.get_pixels_with_length();
+            int n = data.length;
             double total = 0.0;
             int count = 0;
             for (int yy = y; yy < y + h; yy++) {
                 for (int xx = x; xx < x + w; xx++) {
                     int idx = yy * rowstride + xx * channels;
+                    if (idx + 2 >= n) continue;
                     double r = data[idx]     / 255.0;
                     double g = data[idx + 1] / 255.0;
                     double b = data[idx + 2] / 255.0;
