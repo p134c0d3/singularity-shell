@@ -165,7 +165,12 @@ namespace Singularity {
                 }
                 if (key == "dock-style") { update_style(); update_fusion(); schedule_refresh(); }
                 if (key == "dock-alignment") update_alignment();
-                if (key == "panel-fusion") { update_fusion(); update_visibility_mode(); }
+                if (key == "panel-fusion") {
+                    update_fusion();
+                    ((Gtk.Widget) this).hide();
+                    update_visibility_mode();
+                    pulse_frame_clock();
+                }
                 if (key == "dock-gap") update_gap();
                 if (key == "dock-autohide") {
                     autohide = _settings.get_boolean("dock-autohide");
