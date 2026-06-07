@@ -244,6 +244,7 @@ namespace Singularity {
 
             foreach (var res in results) {
                 var row = new SearchResultRow(res);
+                row.request_close.connect(() => toggle());
                 search_results_list.append(row);
             }
 
@@ -298,7 +299,7 @@ namespace Singularity {
 
         public void toggle() {
             int64 now = GLib.get_monotonic_time();
-            if (now - last_toggle_time < 400000) return; // 400ms debounce
+            if (now - last_toggle_time < 150000) return;
             last_toggle_time = now;
             // Dev aid: keep the overview open for screenshots. The toggle to
             // close is suppressed while pinned (turn it off in Developer

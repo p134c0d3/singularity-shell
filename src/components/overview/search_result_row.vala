@@ -9,6 +9,8 @@ namespace Singularity {
         private Box? _preview_content = null;
         private uint _hover_timer = 0;
 
+        public signal void request_close();
+
         public SearchResultRow(SearchResult res) {
             Object(result: res);
             setup_ui();
@@ -16,6 +18,11 @@ namespace Singularity {
 
         private void setup_ui() {
             add_css_class("search-result-row");
+
+            var rc = new GestureClick();
+            rc.set_button(Gdk.BUTTON_SECONDARY);
+            rc.pressed.connect((n, x, y) => show_context_menu(x, y));
+            add_controller(rc);
 
             var outer = new Box(Orientation.VERTICAL, 0);
             set_child(outer);
@@ -210,6 +217,77 @@ namespace Singularity {
                 _preview_content.remove(child);
                 child = _preview_content.get_first_child();
             }
+        }
+
+        private void show_context_menu(double x, double y) {
+            if (result.provider.id == "apps") {
+                show_app_context_menu(x, y);
+            } else if (result.provider.id == "files") {
+                show_file_context_menu(x, y);
+            }
+        }
+
+        private void show_app_context_menu(double x, double y) {
+            if (result.action_id == null) return;
+            var app = AppSystem.get_default().get_app_info(result.action_id);
+            if (app == null) return;
+            string? app_id = app.get_id();
+
+            var menu = new Singularity.Widgets.ContextMenu(this);
+            Gdk.Rectangle rect = { (int) x, (int) y, 1, 1 };
+            menu.set_pointing_to(rect);
+
+            menu.add_item("Open", "system-run-symbolic", () => {
+                AppSystem.launch_app(app);
+                request_close();
+            });
+            menu.add_item("Add to Desktop", "user-desktop-symbolic", () => {
+                AppSystem.add_app_to_desktop(app);
+            });
+            menu.add_separator();
+            if (app_id != null) {
+                string captured_id = app_id.dup();
+                var app_system = AppSystem.get_default();
+                if (app_system.is_pinned(captured_id)) {
+                    menu.add_item("Unpin from Dock", "list-remove-symbolic", () => {
+                        app_system.unpin_app(captured_id);
+                    });
+                } else {
+                    menu.add_item("Pin to Dock", "starred-symbolic", () => {
+                        app_system.pin_app(captured_id);
+                    });
+                }
+            }
+            menu.popup();
+        }
+
+        private void show_file_context_menu(double x, double y) {
+            if (result.action_id == null) return;
+            string uri = result.action_id;
+
+            var menu = new Singularity.Widgets.ContextMenu(this);
+            Gdk.Rectangle rect = { (int) x, (int) y, 1, 1 };
+            menu.set_pointing_to(rect);
+
+            menu.add_item("Open", "system-run-symbolic", () => {
+                result.activate();
+                request_close();
+            });
+            menu.add_item("Open Containing Folder", "folder-open-symbolic", () => {
+                var file = GLib.File.new_for_uri(uri);
+                var parent_dir = file.get_parent();
+                if (parent_dir != null) {
+                    try {
+                        string cmd = AppSystem.resolve_companion_bin("singularity-files")
+                            + " " + GLib.Shell.quote(parent_dir.get_path());
+                        Process.spawn_command_line_async(cmd);
+                        request_close();
+                    } catch (Error e) {
+                        warning("Failed to open containing folder: %s", e.message);
+                    }
+                }
+            });
+            menu.popup();
         }
 
         protected override void dispose() {
