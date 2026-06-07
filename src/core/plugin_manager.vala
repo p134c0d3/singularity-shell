@@ -49,6 +49,14 @@ namespace Singularity {
                 string exe = GLib.FileUtils.read_link("/proc/self/exe");
                 string prefix = GLib.Path.get_dirname(GLib.Path.get_dirname(exe));
                 plugin_dirs += GLib.Path.build_filename(prefix, "share", "singularity", "plugins");
+                // meson installs the plugin modules under libdir, which varies by
+                // distro (lib, lib64, lib/<triplet>); search the common ones so a
+                // plain `meson install` is found regardless of layout.
+                foreach (string libdir in new string[] {
+                        "lib", "lib64",
+                        "lib/x86_64-linux-gnu", "lib/aarch64-linux-gnu" }) {
+                    plugin_dirs += GLib.Path.build_filename(prefix, libdir, "singularity", "plugins");
+                }
             } catch (Error e) { }
             plugin_dirs += GLib.Path.build_filename(Environment.get_user_data_dir(), "singularity", "plugins");
             foreach (unowned string d in Environment.get_system_data_dirs())
