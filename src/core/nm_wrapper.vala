@@ -4,6 +4,7 @@ namespace Singularity {
 
     public class NetworkManagerWrapper : GLib.Object {
         public bool wifi_enabled { get; private set; default = true; }
+        public bool has_wifi { get; private set; default = false; }
         public bool is_airplane_mode { get; private set; default = false; }
         public bool is_wired_connected { get; private set; default = false; }
         public string wifi_icon { get; private set; default = "network-wireless-symbolic"; }
@@ -89,6 +90,7 @@ namespace Singularity {
             foreach (var device in devices) {
                 if (device is NM.DeviceWifi && wifi_device == null) {
                     wifi_device = (NM.DeviceWifi)device;
+                    has_wifi = true;
                     wifi_device.access_point_added.connect(() => {
                         this.access_points_changed();
                     });

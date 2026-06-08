@@ -103,7 +103,7 @@ namespace Singularity {
                     }
                 }
                 screenshot_failed("No URI in response");
-            } else if (response == 1) {
+            } else if (response == 1 || response == 2) {
                 screenshot_failed("User cancelled");
             } else {
                 screenshot_failed("Screenshot failed (code %u)".printf(response));

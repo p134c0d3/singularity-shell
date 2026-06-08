@@ -28,10 +28,12 @@ namespace Singularity {
             var power = SystemMonitor.get_default().power;
             batt_icon.icon_name = power.icon_name;
             batt_label.label = "%d%%".printf((int)power.percentage);
+            batt_box.visible = power.is_present;
             SystemView.update_batt_status(power, batt_status_label);
             power.state_changed.connect(() => {
                 batt_icon.icon_name = power.icon_name;
                 batt_label.label = "%d%%".printf((int)power.percentage);
+                batt_box.visible = power.is_present;
                 SystemView.update_batt_status(power, batt_status_label);
             });
             var spacer = new Label("");
@@ -299,9 +301,14 @@ namespace Singularity {
                             dnd_tile.subtitle = dnd_tile.active ? _("On") : _("Off");
                         });
 
-                        // Row 0: Wi-Fi & Bluetooth
-                        grid.attach(make_tile_with_nav(wifi_tile, "network"), 0, 0, 1, 1);
-                        grid.attach(make_tile_with_nav(bt_tile, "bluetooth"), 1, 0, 1, 1);
+                        // Row 0: Wi-Fi & Bluetooth (only when the hardware exists)
+                        var wifi_nav = make_tile_with_nav(wifi_tile, "network");
+                        var bt_nav = make_tile_with_nav(bt_tile, "bluetooth");
+                        wifi_nav.visible = network.has_wifi;
+                        bt_nav.visible = bluetooth.is_available;
+                        bluetooth.state_changed.connect(() => { bt_nav.visible = bluetooth.is_available; });
+                        grid.attach(wifi_nav, 0, 0, 1, 1);
+                        grid.attach(bt_nav, 1, 0, 1, 1);
 
                         // Row 1: Dark Style & Night Light
                         grid.attach(make_tile_with_nav(dark_tile, "desktop"), 0, 1, 1, 1);
