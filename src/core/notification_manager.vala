@@ -203,10 +203,7 @@ namespace Singularity {
         public void close_notification (uint id) {
             close_notification_request(id);
             notification_closed(id, 3);
-            // Note: we don't necessarily remove from history on 'close',
-            // as close might just mean the popup expired.
-            // But usually 'close_notification' from client means "hide it".
-            // We'll keep it in history unless explicitly dismissed by user in center.
+            remove_from_history(id);
         }
 
         public string[] get_capabilities () {

@@ -684,8 +684,20 @@ namespace Singularity {
             if (hide) {
                 dock_box.remove_css_class("dock-reveal-offset");
                 set_exclusive_zone(this, 0);
-                start_slide(edge, _current_margin, off);
+                if (edge == GtkLayerShell.Edge.BOTTOM) {
+                    dock_box.add_css_class("dock-hiding");
+                    _fade_timer_id = GLib.Timeout.add(260, () => {
+                        _current_margin = off;
+                        set_margin(this, edge, off);
+                        ((Gtk.Widget) this).hide();
+                        _fade_timer_id = 0;
+                        return GLib.Source.REMOVE;
+                    });
+                } else {
+                    start_slide(edge, _current_margin, off);
+                }
             } else {
+                dock_box.remove_css_class("dock-hiding");
                 bool reserve = !autohide && !(intellihide && is_any_window_maximized_on_my_monitor());
                 set_exclusive_zone(this, reserve ? int.max(0, _last_dimension - SHADOW_BOTTOM_PX) : 0);
                 // Returning on-screen needs a fresh buffer; the idle frame clock
