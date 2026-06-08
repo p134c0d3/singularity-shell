@@ -719,6 +719,14 @@ namespace Singularity {
             desktop_group.add_row(icons_row);
             add_group(desktop_group);
 
+            var panel_group = new PreferencesGroup(_("Panel"));
+            var battery_pct_row = new SwitchRow(_("Show Battery Percentage"), _("Display the charge percentage next to the battery icon"), settings.get_boolean("show-battery-percentage"));
+            battery_pct_row.switch_btn.notify["active"].connect(() => {
+                settings.set_boolean("show-battery-percentage", battery_pct_row.switch_btn.active);
+            });
+            panel_group.add_row(battery_pct_row);
+            add_group(panel_group);
+
             var settings_group = new PreferencesGroup(_("Settings"));
             var settings_window_row = new SwitchRow(
                 "Open Settings in Window",

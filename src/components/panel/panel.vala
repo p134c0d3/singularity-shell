@@ -216,9 +216,14 @@ namespace Singularity {
             var battery_icon = new Image.from_icon_name("battery-full-symbolic");
             battery_icon.pixel_size = 16;
 
+            var battery_label = new Label("");
+            battery_label.add_css_class("battery-percentage");
+            battery_label.visible = false;
+
             sys_pill.append(network_icon);
             sys_pill.append(audio_icon);
             sys_pill.append(battery_icon);
+            sys_pill.append(battery_label);
 
             var vpn_indicator = new Image.from_icon_name("network-vpn-symbolic");
             vpn_indicator.pixel_size = 16;
@@ -237,11 +242,20 @@ namespace Singularity {
             battery_icon.icon_name = power.icon_name;
             battery_icon.tooltip_text = "%d%%".printf((int)power.percentage);
             battery_icon.visible = power.is_present;
+
+            void update_battery_label() {
+                bool show = _settings.get_boolean("show-battery-percentage");
+                battery_label.label = "%d%%".printf((int)power.percentage);
+                battery_label.visible = show && power.is_present;
+            }
+            update_battery_label();
             power.state_changed.connect(() => {
                 battery_icon.icon_name = power.icon_name;
                 battery_icon.tooltip_text = "%d%%".printf((int)power.percentage);
                 battery_icon.visible = power.is_present;
+                update_battery_label();
             });
+            _settings.changed["show-battery-percentage"].connect(() => update_battery_label());
             right_box.append(sys_btn);
 
             var notif_btn = new Button();
