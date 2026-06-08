@@ -563,6 +563,13 @@ namespace Singularity {
             var tuning_row = new ExpanderRow(_("Theme Fine Tuning"), _("Advanced GTK and Qt theme overrides"));
             tuning_row.add_css_class("tuning-expander");
 
+            // Use the Singularity GTK theme (generated from our tokens) for all
+            // GTK apps, syncing the dark preference and locking manual overrides.
+            var auto_gtk_row = new SwitchRow(_("Use Singularity Theme for GTK Apps"),
+                _("Theme GTK apps to match Singularity and lock manual overrides"),
+                settings.get_boolean("auto-gtk-theming"));
+            tuning_row.add_row(auto_gtk_row);
+
             // Enumerate available GTK3 themes - scan all XDG system data dirs so
             // /opt/local/share/themes and any future prefix are discovered automatically.
             string[] theme_dirs = {};
@@ -579,7 +586,9 @@ namespace Singularity {
                     var dir = Dir.open(tdir);
                     string? name;
                     while ((name = dir.read_name()) != null) {
-                        if (name.has_prefix(".") || name == "Singularity") continue;
+                        // Hide the empty seam theme our own apps pin; the full
+                        // "Singularity" theme is a normal selectable option.
+                        if (name.has_prefix(".") || name == "SingularityShell") continue;
                         string gtk3_css = GLib.Path.build_filename(tdir, name, "gtk-3.0", "gtk.css");
                         string gtk4_css = GLib.Path.build_filename(tdir, name, "gtk-4.0", "gtk.css");
                         if (GLib.FileUtils.test(gtk3_css, GLib.FileTest.EXISTS) && !gtk3_themes.contains(name))
@@ -650,6 +659,43 @@ namespace Singularity {
                 }
             });
             tuning_row.add_row(gtk4_row);
+
+            // Wire the Singularity-theme toggle: apply the theme + dark
+            // preference and lock the manual GTK selectors while it is on.
+            void apply_singularity_gtk_theme() {
+                bool dark = settings.get_boolean("dark-mode");
+                string prefer = dark ? "1" : "0";
+                try {
+                    var iface = new GLib.Settings("org.gnome.desktop.interface");
+                    iface.set_string("gtk-theme", "Singularity");
+                } catch (Error e) {
+                    warning("desktop: failed to set Singularity gtk-theme: %s", e.message);
+                }
+                foreach (string ver in new string[]{"gtk-3.0", "gtk-4.0"}) {
+                    try {
+                        string vdir = GLib.Path.build_filename(GLib.Environment.get_home_dir(), ".config", ver);
+                        GLib.DirUtils.create_with_parents(vdir, 0755);
+                        GLib.FileUtils.set_contents(GLib.Path.build_filename(vdir, "settings.ini"),
+                            "[Settings]\ngtk-application-prefer-dark-theme=%s\ngtk-theme-name=Singularity\n".printf(prefer));
+                    } catch (Error e) {
+                        warning("desktop: failed to write %s/settings.ini: %s", ver, e.message);
+                    }
+                }
+            }
+            void update_singularity_theme_lock() {
+                bool on = settings.get_boolean("auto-gtk-theming");
+                gtk3_row.sensitive = !on;
+                gtk4_row.sensitive = !on;
+            }
+            update_singularity_theme_lock();
+            auto_gtk_row.switch_btn.notify["active"].connect(() => {
+                settings.set_boolean("auto-gtk-theming", auto_gtk_row.switch_btn.active);
+                update_singularity_theme_lock();
+                if (auto_gtk_row.switch_btn.active) apply_singularity_gtk_theme();
+            });
+            settings.changed["dark-mode"].connect(() => {
+                if (settings.get_boolean("auto-gtk-theming")) apply_singularity_gtk_theme();
+            });
 
             // Icon theme selector (applies to the shell and all apps)
             string[] icon_themes = list_icon_themes();
