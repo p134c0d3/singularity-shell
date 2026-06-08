@@ -1804,10 +1804,9 @@ namespace Singularity {
                 void* handle = get_window_handle_for_app(app_id);
                 if (handle != null) {
                     var focused = app_system.get_focused_window_handle();
-                    // Window-level: only minimize the exact focused window;
-                    // otherwise raise/restore it. App-level matching minimized
-                    // the wrong window and broke restoring after minimize.
-                    if (focused == handle) {
+                    var win = app_system.get_window_by_handle(handle);
+                    bool minimized = win != null && win.is_minimized;
+                    if (focused == handle && !minimized) {
                         Singularity.minimize_window(handle);
                     } else {
                         Singularity.wayland_activate_window(handle);
