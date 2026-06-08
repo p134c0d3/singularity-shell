@@ -267,6 +267,13 @@ namespace Singularity {
             search_results_box = new Box(Orientation.VERTICAL, 4);
             search_results_box.visible = false;
             nav_box.append(search_results_box);
+
+            // Type-ahead: start typing anywhere in the window to focus search.
+            realize.connect(() => {
+                var root = get_root();
+                if (root is Gtk.Widget)
+                    search_entry.set_key_capture_widget((Gtk.Widget) root);
+            });
         }
 
         private void ensure_search_index() {
