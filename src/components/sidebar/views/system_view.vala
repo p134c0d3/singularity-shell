@@ -64,45 +64,11 @@ namespace Singularity {
                 toggle_settings();
             });
             header.append(settings_btn);
-            var lock_btn = new Button.from_icon_name("system-lock-screen-symbolic");
-            lock_btn.has_frame = false;
-            lock_btn.add_css_class("navigation-button");
-            lock_btn.clicked.connect(() => {
-                message("SystemView: Lock button clicked");
-                SessionManager.get_default().lock_screen();
-                hide_sidebar();
-            });
-            header.append(lock_btn);
-            var logout_btn = new Button.from_icon_name("system-log-out-symbolic");
-            logout_btn.has_frame = false;
-            logout_btn.add_css_class("navigation-button");
-            logout_btn.tooltip_text = _("Log Out");
-            logout_btn.clicked.connect(() => {
-                var app = (Gtk.Application) GLib.Application.get_default();
-                var dlg = new PowerConfirmDialog(
-                    app,
-                    "Log Out",
-                    "system-log-out-symbolic",
-                    "All running applications will be closed.",
-                    "Log Out",
-                    () => SessionManager.get_default().logout()
-                );
-                dlg.open_dialog();
-            });
-            header.append(logout_btn);
             var power_btn = new Button.from_icon_name("system-shutdown-symbolic");
             power_btn.add_css_class("circular-button");
+            power_btn.tooltip_text = _("Session");
             power_btn.clicked.connect(() => {
-                var app = (Gtk.Application) GLib.Application.get_default();
-                var dlg = new PowerConfirmDialog(
-                    app,
-                    "Power Off",
-                    "system-shutdown-symbolic",
-                    "Your device will shut down.",
-                    "Power Off",
-                    () => SessionManager.get_default().shutdown()
-                );
-                dlg.open_dialog();
+                show_session_menu(power_btn);
             });
             header.append(power_btn);
             append(header);
@@ -477,6 +443,42 @@ namespace Singularity {
             media_player.margin_bottom = 13;
             content.append(media_player);
             append(content);
+        }
+
+        private void confirm_session_action(string title, string icon, string description,
+                                            string button_label, owned PowerConfirmDialog.ConfirmCallback action) {
+            var app = (Gtk.Application) GLib.Application.get_default();
+            var dlg = new PowerConfirmDialog(app, title, icon, description, button_label, (owned) action);
+            dlg.open_dialog();
+        }
+
+        private void show_session_menu(Widget anchor) {
+            var menu = new Singularity.Widgets.ContextMenu(anchor);
+            menu.add_item("Lock", "system-lock-screen-symbolic", () => {
+                SessionManager.get_default().lock_screen();
+                hide_sidebar();
+            });
+            menu.add_item("Suspend", "weather-clear-night-symbolic", () => {
+                SessionManager.get_default().suspend();
+                hide_sidebar();
+            });
+            menu.add_separator();
+            menu.add_item("Log Out", "system-log-out-symbolic", () => {
+                confirm_session_action("Log Out", "system-log-out-symbolic",
+                    "All running applications will be closed.", "Log Out",
+                    () => SessionManager.get_default().logout());
+            });
+            menu.add_item("Restart", "system-reboot-symbolic", () => {
+                confirm_session_action("Restart", "system-reboot-symbolic",
+                    "Your device will restart.", "Restart",
+                    () => SessionManager.get_default().reboot());
+            });
+            menu.add_item("Power Off", "system-shutdown-symbolic", () => {
+                confirm_session_action("Power Off", "system-shutdown-symbolic",
+                    "Your device will shut down.", "Power Off",
+                    () => SessionManager.get_default().shutdown());
+            });
+            menu.popup();
         }
 
         private Widget make_tile_with_nav(QuickSettingTile tile, string page_name) {

@@ -149,5 +149,23 @@ namespace Singularity {
                 warning("Failed to reboot: %s", e.message);
             }
         }
+
+        public void suspend() {
+            try {
+                var bus = Bus.get_sync(BusType.SYSTEM);
+                bus.call_sync(
+                    "org.freedesktop.login1",
+                    "/org/freedesktop/login1",
+                    "org.freedesktop.login1.Manager",
+                    "Suspend",
+                    new Variant("(b)", true),
+                    null,
+                    DBusCallFlags.NONE,
+                    5000
+                );
+            } catch (Error e) {
+                warning("Failed to suspend: %s", e.message);
+            }
+        }
     }
 }
