@@ -467,9 +467,21 @@ namespace Singularity {
             }
         }
 
+        private void* _last_snap_handle = null;
+        private uint _last_snap = TilingManager.SNAP_NONE;
+
         private void snap_focused(uint snap) {
             void* handle = AppSystem.get_default().get_focused_window_handle();
-            if (handle != null) Singularity.wayland_snap_view(handle, snap);
+            if (handle == null) return;
+            uint effective = snap;
+            if (snap == TilingManager.SNAP_TOP
+                    && handle == _last_snap_handle
+                    && _last_snap == TilingManager.SNAP_TOP) {
+                effective = TilingManager.SNAP_MAXIMIZE;
+            }
+            Singularity.wayland_snap_view(handle, effective);
+            _last_snap_handle = handle;
+            _last_snap = effective;
         }
 
         public void volume_up() throws Error {
