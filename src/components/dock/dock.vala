@@ -49,6 +49,8 @@ namespace Singularity {
         private HashMap<Singularity.DockItemExtension, ulong> _item_extension_handlers =
             new HashMap<Singularity.DockItemExtension, ulong>();
         private HashSet<string> _kept_expanded = new HashSet<string>();
+        private int _expanded_count = 0;
+        private bool _dock_pinned = false;
         private Singularity.DockDBusService? _dbus_service = null;
         private GLib.Settings _settings;
         private ulong _sig_config_changed = 0;
@@ -418,6 +420,29 @@ namespace Singularity {
                 dock_box.halign = Align.CENTER;
                 center_wrapper.halign = Align.CENTER;
             }
+        }
+
+        // When a media/suffix widget expands, freeze the dock_box leading edge
+        // so the hovered icon stays put instead of the whole centered dock
+        // sliding sideways (issue #113). Only the bottom dock recenters along
+        // the horizontal axis via halign; side docks are left untouched.
+        private void pin_expansion() {
+            _expanded_count++;
+            if (_dock_pinned || is_dock_vertical() || dock_alignment != "center") return;
+            Gtk.Allocation alloc;
+            dock_box.get_allocation(out alloc);
+            if (alloc.x <= 0) return;
+            dock_box.margin_start = alloc.x;
+            dock_box.halign = Align.START;
+            _dock_pinned = true;
+        }
+
+        private void unpin_expansion() {
+            if (_expanded_count > 0) _expanded_count--;
+            if (_expanded_count > 0 || !_dock_pinned) return;
+            dock_box.margin_start = 0;
+            dock_box.halign = Align.CENTER;
+            _dock_pinned = false;
         }
 
         private void update_fusion() {
@@ -1137,6 +1162,12 @@ namespace Singularity {
                     dock_box.remove(c);
                     c = nc;
                 }
+                _expanded_count = 0;
+                if (_dock_pinned) {
+                    dock_box.margin_start = 0;
+                    dock_box.halign = Align.CENTER;
+                    _dock_pinned = false;
+                }
             }
 
             string[] pinned = app_system.pinned_apps;
@@ -1776,15 +1807,17 @@ namespace Singularity {
             unowned Gtk.Box pill_weak = pill;
             unowned Gtk.Revealer rev_weak = suffix_revealer;
             hover.enter.connect(() => {
-                if (suffix_box.get_first_child() != null) {
+                if (suffix_box.get_first_child() != null && !rev_weak.reveal_child) {
+                    pin_expansion();
                     pill_weak.add_css_class("expanded");
                     rev_weak.reveal_child = true;
                 }
             });
             hover.leave.connect(() => {
-                if (!_kept_expanded.contains(app_id)) {
+                if (!_kept_expanded.contains(app_id) && rev_weak.reveal_child) {
                     pill_weak.remove_css_class("expanded");
                     rev_weak.reveal_child = false;
+                    unpin_expansion();
                 }
             });
             pill.add_controller(hover);
