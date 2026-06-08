@@ -9,6 +9,12 @@ namespace Singularity {
         private const int CORNER_SIZE = 24;
         private const int CORNER_HYSTERESIS = 48;
         private const int TRIGGER_DELAY_MS = 150;
+        // The action only arms once the pointer is pushed right against the
+        // screen edge (within EDGE_TRIGGER px) while still moving into it, so
+        // brushing past a corner no longer fires it (issue #111). The wider
+        // CORNER_SIZE band only lights the hint.
+        private const int EDGE_TRIGGER = 4;
+        private double _last_x = -1;
 
         private Gtk.Application _app;
         private GLib.Settings settings;
@@ -41,25 +47,10 @@ namespace Singularity {
         public void attach_to_panel(Gtk.Widget panel) {
             var motion = new Gtk.EventControllerMotion();
             motion.motion.connect((x, y) => {
-                int w = panel.get_width();
-                string? action = null;
-                int corner = -1;
-
-                if (x < CORNER_SIZE && _actions[0] != "none") {
-                    action = _actions[0]; corner = 0;
-                } else if (w > 0 && x > w - CORNER_SIZE && _actions[1] != "none") {
-                    action = _actions[1]; corner = 1;
-                }
-
-                if (action == null && _pending_corner >= 0 && _timer_id != 0) {
-                    if (_pending_corner == 0 && x < CORNER_HYSTERESIS) return;
-                    if (_pending_corner == 1 && w > 0 && x > w - CORNER_HYSTERESIS) return;
-                }
-
-                show_hint(corner, action);
-                handle_hover(action, corner);
+                handle_edge_motion(panel.get_width(), x, 0, 1);
             });
             motion.leave.connect(() => {
+                _last_x = -1;
                 on_leave();
             });
             panel.add_controller(motion);
@@ -68,28 +59,53 @@ namespace Singularity {
         public void attach_to_dock(Gtk.Widget dock) {
             var motion = new Gtk.EventControllerMotion();
             motion.motion.connect((x, y) => {
-                int w = dock.get_width();
-                string? action = null;
-                int corner = -1;
-
-                if (x < CORNER_SIZE && _actions[2] != "none") {
-                    action = _actions[2]; corner = 2;
-                } else if (w > 0 && x > w - CORNER_SIZE && _actions[3] != "none") {
-                    action = _actions[3]; corner = 3;
-                }
-
-                if (action == null && _pending_corner >= 0 && _timer_id != 0) {
-                    if (_pending_corner == 2 && x < CORNER_HYSTERESIS) return;
-                    if (_pending_corner == 3 && w > 0 && x > w - CORNER_SIZE) return;
-                }
-
-                show_hint(corner, action);
-                handle_hover(action, corner);
+                handle_edge_motion(dock.get_width(), x, 2, 3);
             });
             motion.leave.connect(() => {
+                _last_x = -1;
                 on_leave();
             });
             dock.add_controller(motion);
+        }
+
+        private void handle_edge_motion(int w, double x, int left_corner, int right_corner) {
+            bool moving_left  = _last_x >= 0 && x < _last_x - 0.5;
+            bool moving_right = _last_x >= 0 && x > _last_x + 0.5;
+            _last_x = x;
+
+            string? hint_action = null;
+            int hint_corner = -1;
+            string? arm_action = null;
+            int arm_corner = -1;
+
+            if (x < CORNER_SIZE && _actions[left_corner] != "none") {
+                hint_action = _actions[left_corner]; hint_corner = left_corner;
+                if (x <= EDGE_TRIGGER && (moving_left || x <= 1)) {
+                    arm_action = hint_action; arm_corner = left_corner;
+                }
+            } else if (w > 0 && x > w - CORNER_SIZE && _actions[right_corner] != "none") {
+                hint_action = _actions[right_corner]; hint_corner = right_corner;
+                if (x >= w - EDGE_TRIGGER && (moving_right || x >= w - 1)) {
+                    arm_action = hint_action; arm_corner = right_corner;
+                }
+            }
+
+            // Keep an armed trigger alive while the pointer lingers near the
+            // corner, so a tiny inward drift before the delay elapses doesn't
+            // cancel it.
+            if (arm_action == null && _pending_corner >= 0 && _timer_id != 0) {
+                if (_pending_corner == left_corner && x < CORNER_HYSTERESIS) {
+                    show_hint(hint_corner, hint_action);
+                    return;
+                }
+                if (_pending_corner == right_corner && w > 0 && x > w - CORNER_HYSTERESIS) {
+                    show_hint(hint_corner, hint_action);
+                    return;
+                }
+            }
+
+            show_hint(hint_corner, hint_action);
+            handle_hover(arm_action, arm_corner);
         }
 
         private void on_leave() {
