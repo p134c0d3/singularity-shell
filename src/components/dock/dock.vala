@@ -689,7 +689,6 @@ namespace Singularity {
                     _fade_timer_id = GLib.Timeout.add(260, () => {
                         _current_margin = off;
                         set_margin(this, edge, off);
-                        ((Gtk.Widget) this).hide();
                         _fade_timer_id = 0;
                         return GLib.Source.REMOVE;
                     });

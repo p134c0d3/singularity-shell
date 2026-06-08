@@ -242,6 +242,14 @@ namespace Singularity {
             xml.append("    </device>\n");
             xml.append("  </libinput>\n");
 
+            xml.append("  <mouse>\n");
+            xml.append("    <default />\n");
+            xml.append("    <context name=\"Titlebar\">\n");
+            xml.append("      <mousebind direction=\"Up\" action=\"Scroll\" />\n");
+            xml.append("      <mousebind direction=\"Down\" action=\"Scroll\" />\n");
+            xml.append("    </context>\n");
+            xml.append("  </mouse>\n");
+
             // Keyboard layout (xkb)
             xml.append("  <keyboard>\n");
             xml.append("    <xkb>\n");
