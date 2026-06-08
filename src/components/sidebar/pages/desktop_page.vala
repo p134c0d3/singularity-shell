@@ -37,8 +37,8 @@ namespace Singularity {
         private static bool wallpaper_css_loaded = false;
 
         // Inline custom color picker state (class fields - never capture mutable locals)
-        private DrawingArea? custom_swatch_da = null;
         private ExpanderRow? custom_picker_row = null;
+        private FlowBox? accent_colors_box = null;
         private DrawingArea? picker_sv_area = null;
         private DrawingArea? picker_hue_bar = null;
         private Entry? picker_hex_entry = null;
@@ -427,52 +427,21 @@ namespace Singularity {
                 colors_box.append(btn);
             }
 
-            // Custom color swatch (toggles inline picker below)
-            custom_swatch_da = new DrawingArea();
-            custom_swatch_da.set_size_request(24, 24);
-            custom_swatch_da.set_draw_func((area, ctx, w, h) => {
-                string custom_hex = settings.get_string("custom-accent-color");
-                bool is_selected = (settings.get_string("accent-color") == "custom");
-                if (is_selected && custom_hex != "") {
-                    Gdk.RGBA c = Gdk.RGBA();
-                    c.parse(custom_hex);
-                    ctx.set_source_rgba(c.red, c.green, c.blue, 1.0);
-                    ctx.arc(w / 2.0, h / 2.0, w / 2.0 - 2, 0, 2 * Math.PI);
-                    ctx.fill();
-                    ctx.set_source_rgba(1, 1, 1, 0.8);
-                    ctx.arc(w / 2.0, h / 2.0, 4, 0, 2 * Math.PI);
-                    ctx.fill();
-                } else {
-                    var grad = new Cairo.Pattern.linear(0, 0, w, h);
-                    grad.add_color_stop_rgba(0.00, 0.96, 0.26, 0.21, 1);
-                    grad.add_color_stop_rgba(0.25, 0.91, 0.58, 0.04, 1);
-                    grad.add_color_stop_rgba(0.50, 0.20, 0.66, 0.33, 1);
-                    grad.add_color_stop_rgba(0.75, 0.13, 0.59, 0.95, 1);
-                    grad.add_color_stop_rgba(1.00, 0.61, 0.15, 0.69, 1);
-                    ctx.set_source(grad);
-                    ctx.arc(w / 2.0, h / 2.0, w / 2.0 - 2, 0, 2 * Math.PI);
-                    ctx.fill();
-                }
-            });
-            var custom_btn = new Button();
-            custom_btn.add_css_class("circular-button");
-            custom_btn.tooltip_text = _("Custom Color");
-            custom_btn.set_child(custom_swatch_da);
-            custom_btn.clicked.connect(() => {
-                settings.set_string("accent-color", "custom");
-                if (custom_picker_row != null) custom_picker_row.expanded = true;
-                refresh_all_swatches(colors_box);
-                if (custom_swatch_da != null) custom_swatch_da.queue_draw();
+            // Saved custom colors render as their own swatches; a trailing
+            // rainbow "+" button opens the picker to create a new one.
+            accent_colors_box = colors_box;
+            rebuild_custom_swatches();
+            settings.changed["custom-accent-colors"].connect(() => {
+                rebuild_custom_swatches();
             });
             settings.changed["accent-color"].connect(() => {
-                if (custom_swatch_da != null) custom_swatch_da.queue_draw();
                 if (custom_picker_row != null)
                     custom_picker_row.expanded = (settings.get_string("accent-color") == "custom");
+                refresh_all_swatches(colors_box);
             });
             settings.changed["custom-accent-color"].connect(() => {
-                if (custom_swatch_da != null) custom_swatch_da.queue_draw();
+                refresh_all_swatches(colors_box);
             });
-            colors_box.append(custom_btn);
             settings.changed["background-picture-uri"].connect(() => {
                  Widget? child = colors_box.get_first_child();
                  while (child != null) {
@@ -559,6 +528,16 @@ namespace Singularity {
             eyedrop_btn.tooltip_text = _("Pick color from screen");
             eyedrop_btn.clicked.connect(_start_eyedropper);
             hex_row2.append(eyedrop_btn);
+
+            var save_btn = new Button.from_icon_name("list-add-symbolic");
+            save_btn.add_css_class("flat");
+            save_btn.add_css_class("circular");
+            save_btn.tooltip_text = _("Save to palette");
+            save_btn.clicked.connect(() => {
+                string hex = settings.get_string("custom-accent-color");
+                if (hex.has_prefix("#") && hex.length == 7) add_custom_color(hex);
+            });
+            hex_row2.append(save_btn);
 
             picker_pad.append(hex_row2);
 
@@ -1663,6 +1642,112 @@ namespace Singularity {
                     }
                 }
                 ch = ch.get_next_sibling();
+            }
+        }
+
+        private void rebuild_custom_swatches() {
+            if (accent_colors_box == null) return;
+            // Drop previously-added custom swatches and the add button.
+            Widget? ch = accent_colors_box.get_first_child();
+            while (ch != null) {
+                Widget? next = ch.get_next_sibling();
+                var fbc = ch as FlowBoxChild;
+                if (fbc != null) {
+                    var b = fbc.get_child() as Button;
+                    if (b != null && (b.has_css_class("custom-accent-swatch")
+                                       || b.has_css_class("add-accent-swatch"))) {
+                        accent_colors_box.remove(fbc);
+                    }
+                }
+                ch = next;
+            }
+            foreach (string hex in settings.get_strv("custom-accent-colors")) {
+                string swatch_hex = hex;
+                var da = new DrawingArea();
+                da.set_size_request(24, 24);
+                da.set_draw_func((area, ctx, w, h) => {
+                    Gdk.RGBA c = Gdk.RGBA();
+                    if (!c.parse(swatch_hex)) return;
+                    ctx.set_source_rgba(c.red, c.green, c.blue, 1.0);
+                    ctx.arc(w / 2.0, h / 2.0, w / 2.0 - 2, 0, 2 * Math.PI);
+                    ctx.fill();
+                    if (settings.get_string("accent-color") == "custom"
+                            && settings.get_string("custom-accent-color") == swatch_hex) {
+                        ctx.set_source_rgba(1, 1, 1, 0.8);
+                        ctx.arc(w / 2.0, h / 2.0, 4, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }
+                });
+                var btn = new Button();
+                btn.add_css_class("circular-button");
+                btn.add_css_class("custom-accent-swatch");
+                btn.tooltip_text = _("Custom Color (right-click to remove)");
+                btn.set_child(da);
+                btn.clicked.connect(() => {
+                    settings.set_string("custom-accent-color", swatch_hex);
+                    settings.set_string("accent-color", "custom");
+                    if (accent_colors_box != null) refresh_all_swatches(accent_colors_box);
+                });
+                var rc = new GestureClick();
+                rc.button = Gdk.BUTTON_SECONDARY;
+                rc.pressed.connect((n, x, y) => {
+                    remove_custom_color(swatch_hex);
+                });
+                btn.add_controller(rc);
+                accent_colors_box.append(btn);
+            }
+            var add_da = new DrawingArea();
+            add_da.set_size_request(24, 24);
+            add_da.set_draw_func((area, ctx, w, h) => {
+                var grad = new Cairo.Pattern.linear(0, 0, w, h);
+                grad.add_color_stop_rgba(0.00, 0.96, 0.26, 0.21, 1);
+                grad.add_color_stop_rgba(0.25, 0.91, 0.58, 0.04, 1);
+                grad.add_color_stop_rgba(0.50, 0.20, 0.66, 0.33, 1);
+                grad.add_color_stop_rgba(0.75, 0.13, 0.59, 0.95, 1);
+                grad.add_color_stop_rgba(1.00, 0.61, 0.15, 0.69, 1);
+                ctx.set_source(grad);
+                ctx.arc(w / 2.0, h / 2.0, w / 2.0 - 2, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            var add_btn = new Button();
+            add_btn.add_css_class("circular-button");
+            add_btn.add_css_class("add-accent-swatch");
+            add_btn.tooltip_text = _("Add Custom Color");
+            var add_overlay = new Overlay();
+            add_overlay.set_child(add_da);
+            var plus = new Image.from_icon_name("list-add-symbolic");
+            plus.pixel_size = 12;
+            plus.halign = Align.CENTER;
+            plus.valign = Align.CENTER;
+            add_overlay.add_overlay(plus);
+            add_btn.set_child(add_overlay);
+            add_btn.clicked.connect(() => {
+                if (custom_picker_row != null) custom_picker_row.expanded = true;
+            });
+            accent_colors_box.append(add_btn);
+        }
+
+        private void add_custom_color(string hex) {
+            string norm = hex.down();
+            var list = settings.get_strv("custom-accent-colors");
+            foreach (string h in list) {
+                if (h.down() == norm) return;
+            }
+            list += hex;
+            settings.set_strv("custom-accent-colors", list);
+        }
+
+        private void remove_custom_color(string hex) {
+            string norm = hex.down();
+            var list = settings.get_strv("custom-accent-colors");
+            string[] kept = {};
+            foreach (string h in list) {
+                if (h.down() != norm) kept += h;
+            }
+            settings.set_strv("custom-accent-colors", kept);
+            if (settings.get_string("accent-color") == "custom"
+                    && settings.get_string("custom-accent-color").down() == norm) {
+                settings.set_string("accent-color", "blue");
             }
         }
 
