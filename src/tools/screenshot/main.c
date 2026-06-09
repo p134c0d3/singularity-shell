@@ -423,12 +423,17 @@ static int write_png_bgra(const char *path, const uint8_t *data,
     for (uint32_t y = 0; y < height; y++) {
         uint32_t sy = y_invert ? (height - 1 - y) : y;
         memcpy(row, data + (size_t)sy * stride, stride);
-        if (!already_rgb) {
-            for (uint32_t x = 0; x < width; x++) {
+        for (uint32_t x = 0; x < width; x++) {
+            if (!already_rgb) {
                 uint8_t b = row[x * 4];
                 row[x * 4]     = row[x * 4 + 2];
                 row[x * 4 + 2] = b;
             }
+            /* Force opaque alpha. X-formats (XRGB/XBGR) leave the 4th byte
+             * undefined; some GPUs (e.g. NVIDIA) leave it 0, which made the
+             * whole screenshot transparent and render dark/washed out (#40).
+             * A screen capture is always opaque, so pin alpha to 255. */
+            row[x * 4 + 3] = 0xFF;
         }
         png_write_row(png, row);
     }

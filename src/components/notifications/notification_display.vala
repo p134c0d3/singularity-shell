@@ -59,15 +59,16 @@ namespace Singularity {
                 });
                 bubbles.set(id, bubble);
                 bubble.opacity = 0;
-                bubble.margin_end = -340;
                 main_box.prepend(bubble);
+                // Fade in. A previous slide animated a negative margin_end,
+                // which allocated the bubble below its minimum width and
+                // flooded the log with "must not decrease below min" warnings.
                 var anim = new Singularity.Animation.TimedAnimation(
                     bubble, 0, 1, 250,
                     Singularity.Animation.TimedAnimation.Easing.EASE_OUT_CUBIC
                 );
                 anim.tick.connect(() => {
                     bubble.opacity = anim.value;
-                    bubble.margin_end = (int)(-340 * (1.0 - anim.value));
                 });
                 anim.play();
             }
@@ -96,7 +97,6 @@ namespace Singularity {
             _active_anims.append(anim);
             anim.tick.connect(() => {
                 bubble.opacity = anim.value;
-                bubble.margin_end = (int)(-340 * (1.0 - anim.value));
             });
             anim.done.connect(() => {
                 _active_anims.remove(anim);
