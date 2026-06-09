@@ -1257,14 +1257,26 @@ namespace Singularity {
             };
             foreach (unowned string d in Environment.get_system_data_dirs())
                 dirs += GLib.Path.build_filename(d, "icons");
+            // XDG_DATA_DIRS may not include the standard system prefixes inside
+            // the session, so probe them explicitly too (#149).
+            dirs += "/usr/share/icons";
+            dirs += "/usr/local/share/icons";
+            var seen_dirs = new GLib.GenericSet<string>(str_hash, str_equal);
             foreach (string dir in dirs) {
+                if (seen_dirs.contains(dir)) continue;
+                seen_dirs.add(dir);
                 try {
                     var dd = Dir.open(dir);
                     string? n;
                     while ((n = dd.read_name()) != null) {
                         if (names.contains(n)) continue;
+                        // A directory is a cursor theme when it carries a
+                        // cursors/ subdir, or marks itself with cursor.theme
+                        // (an alias inheriting cursors from another theme).
                         string cursors = GLib.Path.build_filename(dir, n, "cursors");
-                        if (!FileUtils.test(cursors, FileTest.IS_DIR)) continue;
+                        string marker = GLib.Path.build_filename(dir, n, "cursor.theme");
+                        if (!FileUtils.test(cursors, FileTest.IS_DIR) &&
+                            !FileUtils.test(marker, FileTest.IS_REGULAR)) continue;
                         names.add(n);
                         seen.add(n);
                     }

@@ -1208,6 +1208,40 @@ window.inactive.shadow.color: %s
         } catch (GLib.Error e) {
             warning("cursor theme: failed to update xsettingsd: %s", e.message);
         }
+
+        // The running compositor only reads XCURSOR_THEME/XCURSOR_SIZE from its
+        // own environment, so exporting them here does not change the live
+        // pointer. labwc re-reads ~/.config/labwc/environment and reloads the
+        // cursor on SIGHUP, so persist the values there and reconfigure (#149).
+        int cursor_size = 24;
+        if (src != null && src.lookup("org.gnome.desktop.interface", true) != null) {
+            var iface = new GLib.Settings("org.gnome.desktop.interface");
+            int sz = iface.get_int("cursor-size");
+            if (sz > 0) cursor_size = sz;
+        }
+        try {
+            string env_dir = GLib.Path.build_filename(
+                GLib.Environment.get_user_config_dir(), "labwc");
+            GLib.DirUtils.create_with_parents(env_dir, 0700);
+            string env_path = GLib.Path.build_filename(env_dir, "environment");
+            string body = "";
+            string existing = "";
+            if (GLib.FileUtils.test(env_path, FileTest.EXISTS) &&
+                GLib.FileUtils.get_contents(env_path, out existing)) {
+                foreach (string line in existing.split("\n")) {
+                    string s = line.strip();
+                    if (s == "" || s.has_prefix("XCURSOR_THEME") ||
+                        s.has_prefix("XCURSOR_SIZE")) continue;
+                    body += line + "\n";
+                }
+            }
+            body += "XCURSOR_THEME=%s\n".printf(theme);
+            body += "XCURSOR_SIZE=%d\n".printf(cursor_size);
+            GLib.FileUtils.set_contents(env_path, body);
+            Process.spawn_command_line_async("labwc --reconfigure");
+        } catch (GLib.Error e) {
+            warning("cursor theme: failed to update labwc environment: %s", e.message);
+        }
     }
 
     private void apply_icon_theme() {
