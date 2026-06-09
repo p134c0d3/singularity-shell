@@ -121,4 +121,7 @@ namespace Singularity {
 
     [CCode (cname = "singularity_type_text", cheader_filename = "vkbd.h")]
     public void type_text(string text);
+
+    [CCode (cname = "singularity_xwayland_icon", cheader_filename = "xwl_icon.h")]
+    public Gdk.Texture? xwayland_icon(string? app_id, string? title);
 }

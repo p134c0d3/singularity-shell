@@ -358,6 +358,7 @@ singularity_core_sources = files(
     'src/wayland/wayland_integration.vapi',
     'src/wayland/blur_surface.c',
     'src/wayland/vkbd.c',
+    'src/wayland/xwl_icon.c',
 )
 
 subdir('src/lockscreen')
@@ -366,7 +367,7 @@ executable('singularity-desktop',
   sources: ['src/core/main.vala'] + singularity_core_sources + [
     wl_proto_c, wl_proto_h, ws_proto_c, ws_proto_h, sp_proto_c, sp_proto_h, om_proto_c, om_proto_h, st_proto_c, st_proto_h, gc_proto_c, gc_proto_h, sb_proto_c, sb_proto_h, vk_proto_c, vk_proto_h
   ],
-  dependencies: dependencies + [libsingularity_dep, gee_dep, json_dep, cc.find_library('m'), cc.find_library('crypt')],
+  dependencies: dependencies + [libsingularity_dep, gee_dep, json_dep, cc.find_library('m'), cc.find_library('crypt'), dependency('xcb')],
   include_directories: [
     include_directories('src'),
     include_directories('src/core'),

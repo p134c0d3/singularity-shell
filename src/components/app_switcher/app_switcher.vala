@@ -325,21 +325,26 @@ namespace Singularity {
         // generic placeholder. Wayland toplevels do not expose their own icon.
         internal static void apply_window_icon(Image icon, AppSystem.Window win) {
             if (win.gicon != null) { icon.set_from_gicon(win.gicon); return; }
-            if (win.icon_name != null && win.icon_name != "") {
-                icon.icon_name = win.icon_name; return;
-            }
             var theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default());
+            // Try themed names: the window icon_name, then the app_id and its
+            // common variants. Only use a name the theme actually has, so we
+            // do not set a bogus name (e.g. "Minecraft 26.1.2") that renders
+            // as a broken icon and blocks the fallbacks below.
+            string[] cands = {};
+            if (win.icon_name != null && win.icon_name != "") cands += win.icon_name;
             string aid = win.app_id;
             if (aid != null && aid != "") {
-                if (theme.has_icon(aid)) { icon.icon_name = aid; return; }
-                string lower = aid.down();
-                if (theme.has_icon(lower)) { icon.icon_name = lower; return; }
+                cands += aid;
+                cands += aid.down();
                 int dot = aid.last_index_of(".");
-                if (dot >= 0 && dot + 1 < aid.length) {
-                    string tail = aid.substring(dot + 1).down();
-                    if (theme.has_icon(tail)) { icon.icon_name = tail; return; }
-                }
+                if (dot >= 0 && dot + 1 < aid.length) cands += aid.substring(dot + 1).down();
             }
+            foreach (string c in cands)
+                if (theme.has_icon(c)) { icon.icon_name = c; return; }
+            // XWayland apps (games, Wine, Discord) carry their icon in
+            // _NET_WM_ICON; use it before the generic placeholder (#93).
+            var tex = Singularity.xwayland_icon(win.app_id, win.title);
+            if (tex != null) { icon.set_from_paintable(tex); return; }
             icon.icon_name = "application-x-executable";
         }
 

@@ -1562,6 +1562,10 @@ namespace Singularity {
             }
             string lower = strip_desktop(app_id);
             if (theme.has_icon(lower)) { img.icon_name = lower; return; }
+            // XWayland apps (games, Wine, Discord) carry their icon in
+            // _NET_WM_ICON; use it before the generic placeholder (#93).
+            var tex = Singularity.xwayland_icon(app_id, null);
+            if (tex != null) { img.set_from_paintable(tex); return; }
             img.icon_name = "application-x-executable";
         }
 
