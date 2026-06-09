@@ -14,7 +14,7 @@ namespace Singularity.SidebarPages {
 
             autostart_dir = Path.build_filename(Environment.get_user_config_dir(), "autostart");
 
-            var add_grp = new PreferencesGroup(_("Add"),
+            var add_grp = new PreferencesGroup(_("Autostart Apps"),
                 _("Programs added here start automatically when you log in."));
 
             app_row = new SearchableExpanderRow(_("Add Application"),

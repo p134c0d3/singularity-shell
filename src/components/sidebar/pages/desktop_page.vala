@@ -804,7 +804,7 @@ namespace Singularity {
             });
             wm_group.add_row(ssd_row);
 
-            var legacy_row = new SwitchRow(_("Legacy Titlebar"), _("Use a classic titlebar with inline buttons instead of floating hover controls (requires app restart)"), settings.get_boolean("legacy-titlebar"));
+            var legacy_row = new SwitchRow(_("Classic Titlebar"), _("Use a classic titlebar with inline buttons instead of floating hover controls (requires app restart)"), settings.get_boolean("legacy-titlebar"));
             legacy_row.switch_btn.notify["active"].connect(() => {
                 settings.set_boolean("legacy-titlebar", legacy_row.switch_btn.active);
             });

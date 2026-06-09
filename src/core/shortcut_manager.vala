@@ -335,6 +335,11 @@ namespace Singularity {
             // 1. Apply immediately to all GTK4 windows in this process.
             Gtk.Settings.get_default().gtk_decoration_layout = layout;
 
+            // 1b. Persist to the per-user GTK settings.ini so external Wayland
+            // GTK3/4 apps (which never read ~/.xsettingsd) pick up the same
+            // button layout at startup, instead of falling back to close-only.
+            write_decoration_layout_ini(layout);
+
             // 2. Write Gtk/DecorationLayout to ~/.xsettingsd for X11/XWayland apps.
             string xsettings_path = GLib.Path.build_filename(
                 GLib.Environment.get_home_dir(), ".xsettingsd");
@@ -381,6 +386,28 @@ namespace Singularity {
                 }
             } catch (GLib.Error e) {
                 warning("apply_gtk_decoration_layout: %s", e.message);
+            }
+        }
+
+        // Merge gtk-decoration-layout into both GTK settings.ini files, keeping
+        // any other keys (e.g. gtk-theme-name) already present.
+        private void write_decoration_layout_ini(string layout) {
+            foreach (string ver in new string[]{"gtk-3.0", "gtk-4.0"}) {
+                string dir = GLib.Path.build_filename(
+                    GLib.Environment.get_user_config_dir(), ver);
+                string path = GLib.Path.build_filename(dir, "settings.ini");
+                var kf = new GLib.KeyFile();
+                try {
+                    kf.load_from_file(path, GLib.KeyFileFlags.KEEP_COMMENTS
+                        | GLib.KeyFileFlags.KEEP_TRANSLATIONS);
+                } catch {}
+                kf.set_string("Settings", "gtk-decoration-layout", layout);
+                try {
+                    GLib.DirUtils.create_with_parents(dir, 0755);
+                    GLib.FileUtils.set_contents(path, kf.to_data());
+                } catch (GLib.Error e) {
+                    warning("decoration-layout settings.ini (%s): %s", ver, e.message);
+                }
             }
         }
 
