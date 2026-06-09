@@ -363,9 +363,35 @@ namespace Singularity {
             /* Request compositor-level background blur (frosted glass) */
         }
 
+        // A window is fullscreen on THIS panel's monitor. The global
+        // focused-fullscreen check hid every monitor's panel when a video went
+        // fullscreen on a single monitor (#99/#100).
+        private bool is_any_window_fullscreen_on_my_monitor() {
+            var app_sys = AppSystem.get_default();
+            var display = Gdk.Display.get_default();
+            var monitor = this.gdk_monitor ?? find_shell_monitor();
+            if (monitor == null && display != null && display.get_monitors().get_n_items() > 0)
+                monitor = display.get_monitors().get_item(0) as Gdk.Monitor;
+            bool single = (display == null) || (display.get_monitors().get_n_items() <= 1);
+            string? target_conn = (monitor != null) ? monitor.get_connector() : null;
+            Gdk.Monitor? primary = (display != null)
+                ? display.get_monitors().get_item(0) as Gdk.Monitor : null;
+            bool target_is_primary = (primary != null && monitor != null)
+                && (primary == monitor || (target_conn != null && primary.get_connector() == target_conn));
+            foreach (var win in app_sys.get_windows()) {
+                if (!win.is_fullscreen || win.is_minimized) continue;
+                if (single || monitor == null) return true;
+                var wmon = Singularity.wayland_get_window_monitor(win.handle);
+                if (wmon == null) { if (target_is_primary) return true; continue; }
+                if (wmon == monitor) return true;
+                if (target_conn != null && wmon.get_connector() == target_conn) return true;
+            }
+            return false;
+        }
+
         private void update_fullscreen_mode() {
             if (is_greeter_mode) return;
-            bool fs = AppSystem.get_default().is_focused_window_fullscreen();
+            bool fs = is_any_window_fullscreen_on_my_monitor();
             if (fs == _hidden_for_fullscreen) return;
             _hidden_for_fullscreen = fs;
             if (fs) {

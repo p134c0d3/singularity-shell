@@ -186,12 +186,22 @@ namespace Singularity {
             stack_add_unique(spread, ws_id);
             window_stack.set_visible_child_full(ws_id, transition);
 
-            // Clean up old spreads after a delay
-            Timeout.add(600, () => {
+            // Clean up old spreads after a delay. Coalesce into a single timer
+            // and keep whatever is CURRENTLY visible (not the spread captured
+            // when this timer was scheduled): scrolling fast queued several
+            // timers, and an older one removed the newest spread, blanking the
+            // whole overview until you scrolled back and forth (#48).
+            if (_spread_cleanup_id != 0) {
+                GLib.Source.remove(_spread_cleanup_id);
+                _spread_cleanup_id = 0;
+            }
+            _spread_cleanup_id = Timeout.add(600, () => {
+                _spread_cleanup_id = 0;
+                var keep = window_stack.get_visible_child();
                 Widget? child = window_stack.get_first_child();
                 while (child != null) {
                     Widget next = child.get_next_sibling();
-                    if (child != spread) {
+                    if (child != keep) {
                         window_stack.remove(child);
                     }
                     child = next;
@@ -213,6 +223,7 @@ namespace Singularity {
 
         private bool _refresh_pending_overview = false;
         private int _spread_seq = 0;
+        private uint _spread_cleanup_id = 0;
 
         private void schedule_refresh_overview() {
             // Never refresh when hidden - avoids constant SHM buffer allocation in background

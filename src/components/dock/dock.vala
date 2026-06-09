@@ -722,6 +722,13 @@ namespace Singularity {
                 }
             } else {
                 dock_box.remove_css_class("dock-hiding");
+                // Revealing means we are not fullscreen-hidden; make sure the
+                // surface is back on the OVERLAY layer. After leaving a
+                // fullscreen video the dock could be left on BACKGROUND and
+                // would otherwise slide in underneath a maximized window (#110).
+                if (!_hidden_for_fullscreen) {
+                    set_layer(this, GtkLayerShell.Layer.OVERLAY);
+                }
                 // Only the always-visible dock reserves work area. Autohide and
                 // intellihide overlap windows instead, otherwise restoring a
                 // minimized window makes it shrink to dodge a dock that is about
@@ -849,8 +856,33 @@ namespace Singularity {
             update_autohide_state();
         }
 
+        // A window is fullscreen on THIS dock's monitor. Using the global
+        // focused-fullscreen check made every monitor's dock hide when a video
+        // went fullscreen on one monitor (#99/#100).
+        private bool is_any_window_fullscreen_on_my_monitor() {
+            var display = Gdk.Display.get_default();
+            var monitor = this.get_target_monitor() ?? find_shell_monitor();
+            if (monitor == null && display != null && display.get_monitors().get_n_items() > 0)
+                monitor = display.get_monitors().get_item(0) as Gdk.Monitor;
+            bool single = (display == null) || (display.get_monitors().get_n_items() <= 1);
+            string? target_conn = (monitor != null) ? monitor.get_connector() : null;
+            Gdk.Monitor? primary = (display != null)
+                ? display.get_monitors().get_item(0) as Gdk.Monitor : null;
+            bool target_is_primary = (primary != null && monitor != null)
+                && (primary == monitor || (target_conn != null && primary.get_connector() == target_conn));
+            foreach (var win in app_system.get_windows()) {
+                if (!win.is_fullscreen || win.is_minimized) continue;
+                if (single || monitor == null) return true;
+                var wmon = Singularity.wayland_get_window_monitor(win.handle);
+                if (wmon == null) { if (target_is_primary) return true; continue; }
+                if (wmon == monitor) return true;
+                if (target_conn != null && wmon.get_connector() == target_conn) return true;
+            }
+            return false;
+        }
+
         private void update_fullscreen_mode() {
-            bool fs = app_system.is_focused_window_fullscreen();
+            bool fs = is_any_window_fullscreen_on_my_monitor();
             if (fs == _hidden_for_fullscreen) return;
             _hidden_for_fullscreen = fs;
             if (fs) {
