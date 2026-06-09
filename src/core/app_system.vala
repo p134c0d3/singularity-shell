@@ -1096,6 +1096,10 @@ namespace Singularity {
                     current_focused_window_handle = null;
                     window_focused(null);
                     any_fullscreen_changed();
+                    // Closing the focused window does not emit a focus event, so
+                    // clear the global menu here too; a new focus event will
+                    // repopulate it if another window takes focus.
+                    update_menu_model("");
                 }
                 foreach (var ws in workspaces) {
                     if (ws.windows.find(found) != null) {

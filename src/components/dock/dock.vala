@@ -722,7 +722,11 @@ namespace Singularity {
                 }
             } else {
                 dock_box.remove_css_class("dock-hiding");
-                bool reserve = !autohide && !(intellihide && is_any_window_maximized_on_my_monitor());
+                // Only the always-visible dock reserves work area. Autohide and
+                // intellihide overlap windows instead, otherwise restoring a
+                // minimized window makes it shrink to dodge a dock that is about
+                // to hide, and the shrink persists (issue #79).
+                bool reserve = !autohide && !intellihide;
                 set_exclusive_zone(this, reserve ? int.max(0, _last_dimension - SHADOW_BOTTOM_PX) : 0);
                 // Returning on-screen needs a fresh buffer; the idle frame clock
                 // won't render one, so an unmap->map cycle at the visible margin
@@ -2354,7 +2358,7 @@ namespace Singularity {
                 GtkLayerShell.set_exclusive_zone(this, 0);
                 app_system.shell_dock_height = 0;
             } else {
-                if (!autohide && !(intellihide && is_any_window_maximized_on_my_monitor())) {
+                if (!autohide && !intellihide) {
                     int zone = int.max(0, dimension - SHADOW_BOTTOM_PX);
                     GtkLayerShell.set_exclusive_zone(this, zone);
                     app_system.shell_dock_height = zone;

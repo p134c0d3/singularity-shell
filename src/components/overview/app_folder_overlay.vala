@@ -170,9 +170,12 @@ namespace Singularity {
 
             btn.set_child(box);
             btn.clicked.connect(() => {
-                AppSystem.launch_app(app);
+                // Dismiss the folder and the overview first, then launch, so the
+                // launched window is not left hidden behind a folder/overview
+                // that failed to close (issue #51).
                 if (on_app_launched != null) on_app_launched();
                 close_overlay();
+                AppSystem.launch_app(app);
             });
 
             // Right-click: remove from folder
@@ -189,8 +192,9 @@ namespace Singularity {
                     app_system.remove_app_from_folder(captured_folder_id, captured_app_id);
                 });
                 menu.add_item("Open", "system-run-symbolic", () => {
-                    AppSystem.launch_app(app);
+                    if (on_app_launched != null) on_app_launched();
                     close_overlay();
+                    AppSystem.launch_app(app);
                 });
                 menu.popup();
             });
