@@ -45,6 +45,7 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
     public Singularity.Sidebar? sidebar = null;
     private Singularity.NotificationDisplay? notification_display = null;
     private Singularity.RunDialog? run_dialog = null;
+    private Singularity.EmojiPicker? emoji_picker = null;
     private Singularity.SettingsWindow? settings_window = null;
     private Singularity.AppSwitcher? app_switcher = null;
     private bool icon_theme_probe_done = false;
@@ -175,25 +176,29 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
                 .emit_notification_closed(id, reason);
         });
 
-        // Register Global Menu Registrar
-        menu_registrar = new Singularity.AppMenuRegistrar();
-        Bus.own_name(
-            BusType.SESSION,
-            "com.canonical.AppMenu.Registrar",
-            BusNameOwnerFlags.NONE,
-            (conn) => {
-                try {
-                    conn.register_object<Singularity.AppMenuRegistrar>(
-                        "/com/canonical/AppMenu/Registrar",
-                        menu_registrar
-                    );
-                } catch (IOError e) {
-                    warning("Failed to register AppMenu Registrar: %s", e.message);
-                }
-            },
-            () => {},
-            () => { warning("Lost name com.canonical.AppMenu.Registrar"); }
-        );
+        // Register Global Menu Registrar. When the global menu is disabled we
+        // do not own this name, so apps find no menu host and keep their own
+        // in-window menu bar instead (#146). Takes effect on next login.
+        if (settings.get_boolean("global-menu-enabled")) {
+            menu_registrar = new Singularity.AppMenuRegistrar();
+            Bus.own_name(
+                BusType.SESSION,
+                "com.canonical.AppMenu.Registrar",
+                BusNameOwnerFlags.NONE,
+                (conn) => {
+                    try {
+                        conn.register_object<Singularity.AppMenuRegistrar>(
+                            "/com/canonical/AppMenu/Registrar",
+                            menu_registrar
+                        );
+                    } catch (IOError e) {
+                        warning("Failed to register AppMenu Registrar: %s", e.message);
+                    }
+                },
+                () => {},
+                () => { warning("Lost name com.canonical.AppMenu.Registrar"); }
+            );
+        }
 
         setup_backgrounds();
         hot_corner_manager = new Singularity.HotCornerManager(this);
@@ -295,6 +300,10 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
         Singularity.SystemMonitor.get_default().shortcuts.run_command_triggered.connect(() => {
             ensure_run_dialog();
             run_dialog.toggle();
+        });
+        Singularity.SystemMonitor.get_default().shortcuts.emoji_picker_triggered.connect(() => {
+            ensure_emoji_picker();
+            emoji_picker.toggle();
         });
         Singularity.SystemMonitor.get_default().shortcuts.retile_triggered.connect(() => {
             if (tiling_manager != null) {
@@ -434,6 +443,12 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
 
     public void ensure_goa_calendar() {
         init_goa.begin();
+    }
+
+    private void ensure_emoji_picker() {
+        if (emoji_picker == null) {
+            emoji_picker = new Singularity.EmojiPicker(this);
+        }
     }
 
     private void ensure_run_dialog() {

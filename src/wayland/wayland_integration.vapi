@@ -118,4 +118,7 @@ namespace Singularity {
 
     [CCode (cname = "singularity_surface_set_input_passthrough", cheader_filename = "blur_surface.h")]
     public void surface_set_input_passthrough(Gtk.Widget widget);
+
+    [CCode (cname = "singularity_type_text", cheader_filename = "vkbd.h")]
+    public void type_text(string text);
 }

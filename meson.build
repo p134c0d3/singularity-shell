@@ -226,6 +226,19 @@ sl_proto_h = custom_target(
   input: sl_proto_xml,
   command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@']
 )
+vk_proto_xml = 'protocols/virtual-keyboard-unstable-v1.xml'
+vk_proto_c = custom_target(
+  'virtual-keyboard-unstable-v1-protocol.c',
+  output: 'virtual-keyboard-unstable-v1-protocol.c',
+  input: vk_proto_xml,
+  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@']
+)
+vk_proto_h = custom_target(
+  'virtual-keyboard-unstable-v1-client-protocol.h',
+  output: 'virtual-keyboard-unstable-v1-client-protocol.h',
+  input: vk_proto_xml,
+  command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@']
+)
 
 libsingularity_dep = dependency('singularity-1.0',
   fallback: ['libsingularity', 'libsingularity_dep']
@@ -335,6 +348,7 @@ singularity_core_sources = files(
     'src/components/overview/search_result_row.vala',
     'src/components/overview/workspace_overview.vala',
     'src/components/run_dialog/run_dialog.vala',
+    'src/components/emoji_picker/emoji_picker.vala',
     'src/components/app_switcher/app_switcher.vala',
     'src/core/search/search_manager.vala',
     'src/core/search/providers/app_provider.vala',
@@ -343,13 +357,14 @@ singularity_core_sources = files(
     'src/wayland/wayland_integration.c',
     'src/wayland/wayland_integration.vapi',
     'src/wayland/blur_surface.c',
+    'src/wayland/vkbd.c',
 )
 
 subdir('src/lockscreen')
 
 executable('singularity-desktop',
   sources: ['src/core/main.vala'] + singularity_core_sources + [
-    wl_proto_c, wl_proto_h, ws_proto_c, ws_proto_h, sp_proto_c, sp_proto_h, om_proto_c, om_proto_h, st_proto_c, st_proto_h, gc_proto_c, gc_proto_h, sb_proto_c, sb_proto_h
+    wl_proto_c, wl_proto_h, ws_proto_c, ws_proto_h, sp_proto_c, sp_proto_h, om_proto_c, om_proto_h, st_proto_c, st_proto_h, gc_proto_c, gc_proto_h, sb_proto_c, sb_proto_h, vk_proto_c, vk_proto_h
   ],
   dependencies: dependencies + [libsingularity_dep, gee_dep, json_dep, cc.find_library('m'), cc.find_library('crypt')],
   include_directories: [

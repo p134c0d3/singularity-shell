@@ -144,7 +144,7 @@ namespace Singularity {
 
             main_box.append(left_box);
 
-            if (!is_greeter_mode) {
+            if (!is_greeter_mode && _settings.get_boolean("global-menu-enabled")) {
                 menu_bar = new Singularity.Shell.GlobalMenuBar();
                 menu_bar.valign = Align.CENTER;
                 menu_bar.visible = false;

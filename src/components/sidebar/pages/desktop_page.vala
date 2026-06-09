@@ -781,6 +781,12 @@ namespace Singularity {
                 settings.set_boolean("show-battery-percentage", battery_pct_row.switch_btn.active);
             });
             panel_group.add_row(battery_pct_row);
+
+            var global_menu_row = new SwitchRow(_("Global Menu"), _("Show app menus in the top panel; off shows each app's own menu bar (requires login again)"), settings.get_boolean("global-menu-enabled"));
+            global_menu_row.switch_btn.notify["active"].connect(() => {
+                settings.set_boolean("global-menu-enabled", global_menu_row.switch_btn.active);
+            });
+            panel_group.add_row(global_menu_row);
             add_group(panel_group);
 
             var settings_group = new PreferencesGroup(_("Settings"));
