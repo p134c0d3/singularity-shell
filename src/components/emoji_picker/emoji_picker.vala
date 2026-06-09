@@ -188,6 +188,20 @@ namespace Singularity {
             );
             add_css_class("emoji-picker");
 
+            // The focused SearchEntry swallows Escape (stop-search) before it can
+            // bubble up to ShellDialog's close handler, so close on Escape here in
+            // the capture phase (#148).
+            var esc = new EventControllerKey();
+            esc.set_propagation_phase(PropagationPhase.CAPTURE);
+            esc.key_pressed.connect((keyval, keycode, state) => {
+                if (keyval == Gdk.Key.Escape) {
+                    close_dialog();
+                    return true;
+                }
+                return false;
+            });
+            ((Widget)this).add_controller(esc);
+
             search = new SearchEntry();
             search.placeholder_text = _("Search emoji…");
             search.width_request = 420;
