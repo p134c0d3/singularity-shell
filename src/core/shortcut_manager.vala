@@ -230,6 +230,10 @@ namespace Singularity {
 
             xml.append("  <core>\n    <decoration>server</decoration>\n  </core>\n");
 
+            // Show the snap/tile preview overlay immediately instead of after
+            // labwc's default 500ms, so the tiling rectangles appear instantly (#120).
+            xml.append("  <snapping>\n    <overlay>\n      <delay inner=\"0\" outer=\"0\" />\n    </overlay>\n  </snapping>\n");
+
             // Pointer/touchpad behaviour from settings.
             bool mouse_accel = settings.get_boolean("mouse-acceleration");
             bool natural_scroll = settings.get_boolean("natural-scrolling");

@@ -98,6 +98,11 @@ namespace Singularity {
                         // Wi-Fi Tile
                         var network = SystemMonitor.get_default().network;
                         var wifi_tile = new QuickSettingTile("Wi-Fi", network.wifi_icon, network.wifi_enabled);
+                        // The click handler drives the real state via toggle_wifi;
+                        // the NetworkManager state_changed signal then sets the
+                        // tile's active state. Let the tile manage its own visual
+                        // state too and the two fight, flipping it on/off (#177).
+                        wifi_tile.auto_toggle = false;
                         wifi_tile.subtitle = network.wifi_ssid;
                         network.state_changed.connect(() => {
                             wifi_tile.active = network.wifi_enabled;
