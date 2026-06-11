@@ -248,6 +248,13 @@ namespace Singularity {
                     win.is_maximized = (is_maximized != 0);
                     win.is_fullscreen = (is_fullscreen != 0);
                     win.is_minimized = (is_minimized != 0);
+                    // Minimizing the focused window unfocuses it, so clear the
+                    // global menu and the app name instead of leaving them on
+                    // the panel (#179).
+                    if (!was_minimized && win.is_minimized
+                            && handle == self.current_focused_window_handle) {
+                        self.notify_desktop_focused();
+                    }
                     if (was_maximized != win.is_maximized || was_fullscreen != win.is_fullscreen) {
                         PreviewCache.get_default().invalidate(handle);
                     }
