@@ -798,19 +798,20 @@ namespace Singularity {
             return _atspi_usable == 1;
         }
 
+        private Gee.HashSet<string> atspi_no_menu = new Gee.HashSet<string>();
+
         private void try_atspi(int gen, string safe_id, SimpleActionGroup group) {
             if (menu_generation != gen) return;
+            if (atspi_no_menu.contains(safe_id)) return;
             if (!atspi_bus_usable()) return;
             string captured_id = safe_id.dup();
             AtSpiMenuProvider.build_menu_async(captured_id, group, (menu) => {
                 if (menu_generation != gen) return;
                 bool real = menu != null && model_has_submenu(menu);
-                // Apps with lazy menus (Firefox) expose only top-level leaves
-                // with no children at scan time. Such a menu is not usable, so
-                // do not replace the desktop-entry fallback (File + Window) that
-                // was already emitted with a row of dead buttons (#82, #112).
                 if (real) {
                     emit_menu(gen, menu, group);
+                } else {
+                    atspi_no_menu.add(captured_id);
                 }
             });
         }
