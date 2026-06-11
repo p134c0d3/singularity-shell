@@ -913,6 +913,11 @@ namespace Singularity {
             settings.changed["dock-style"].connect(() => {
                 extended_row.visible = settings.get_string("dock-style") == "panel";
             });
+            var previews_row = new SwitchRow(_("Window Previews on Hover"), _("Preview open windows when hovering an app with more than one window"), settings.get_boolean("dock-window-previews"));
+            previews_row.switch_btn.notify["active"].connect(() => {
+                settings.set_boolean("dock-window-previews", previews_row.switch_btn.active);
+            });
+            adv_dock_group.add_row(previews_row);
             string current_align = settings.get_string("dock-alignment");
             string align_label = "Center";
             if (current_align == "start") align_label = "Start";

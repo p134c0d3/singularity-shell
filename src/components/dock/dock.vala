@@ -50,6 +50,9 @@ namespace Singularity {
             new HashMap<Singularity.DockItemExtension, ulong>();
         private HashSet<string> _kept_expanded = new HashSet<string>();
         private int _expanded_count = 0;
+        private Gtk.Popover? _preview_popover = null;
+        private uint _preview_dismiss_id = 0;
+        private bool _preview_open = false;
         private bool _dock_pinned = false;
         private Singularity.DockDBusService? _dbus_service = null;
         private GLib.Settings _settings;
@@ -542,7 +545,7 @@ namespace Singularity {
                 should_hide = is_any_window_maximized_on_my_monitor();
             }
 
-            if (_hovered || _overview_active || _menu_open) {
+            if (_hovered || _overview_active || _menu_open || _preview_open) {
                 should_hide = false;
             }
 
@@ -1193,6 +1196,7 @@ namespace Singularity {
         }
 
         private void refresh() {
+            dismiss_window_previews();
             int icon_size = _settings.get_int("dock-icon-size");
             bool extended = _settings.get_boolean("dock-extended-mode") && (dock_style == "panel");
 
@@ -1366,6 +1370,126 @@ namespace Singularity {
                 d.valign = Align.CENTER;
                 indicator_row.append(d);
             }
+        }
+
+        private void cancel_preview_dismiss() {
+            if (_preview_dismiss_id != 0) {
+                GLib.Source.remove(_preview_dismiss_id);
+                _preview_dismiss_id = 0;
+            }
+        }
+
+        private void schedule_preview_dismiss() {
+            cancel_preview_dismiss();
+            _preview_dismiss_id = GLib.Timeout.add(250, () => {
+                _preview_dismiss_id = 0;
+                dismiss_window_previews();
+                return GLib.Source.REMOVE;
+            });
+        }
+
+        private void dismiss_window_previews() {
+            cancel_preview_dismiss();
+            if (_preview_popover != null) {
+                _preview_popover.popdown();
+                _preview_popover.unparent();
+                _preview_popover = null;
+            }
+            if (_preview_open) {
+                _preview_open = false;
+                update_autohide_state();
+            }
+        }
+
+        private Gtk.Widget build_preview_tile(AppSystem.Window win) {
+            void* h = win.handle;
+            var overlay = new Gtk.Overlay();
+            overlay.add_css_class("dock-window-preview");
+            overlay.set_size_request(160, 100);
+
+            var pic = new Gtk.Picture();
+            pic.content_fit = Gtk.ContentFit.CONTAIN;
+            overlay.set_child(pic);
+
+            if (h != null) {
+                PreviewCache.get_default().request(h, 160, 100, (tex) => {
+                    if (tex == null) return;
+                    var pb = Gdk.pixbuf_get_from_texture(tex);
+                    if (pb == null) { pic.paintable = tex; return; }
+                    double sc = double.min(160.0 / pb.width, 100.0 / pb.height);
+                    if (sc > 1.0) sc = 1.0;
+                    int nw = int.max(1, (int)(pb.width * sc));
+                    int nh = int.max(1, (int)(pb.height * sc));
+                    var sp = pb.scale_simple(nw, nh, Gdk.InterpType.BILINEAR);
+                    pic.paintable = (sp != null) ? Gdk.Texture.for_pixbuf(sp) : tex;
+                });
+            }
+
+            var title = new Gtk.Label(win.title != null && win.title != "" ? win.title : win.app_id);
+            title.add_css_class("dock-window-preview-title");
+            title.ellipsize = Pango.EllipsizeMode.END;
+            title.halign = Align.START;
+            title.valign = Align.END;
+            title.max_width_chars = 18;
+            overlay.add_overlay(title);
+
+            var close = new Singularity.Widgets.CircularButton("window-close-symbolic", _("Close"), 16);
+            close.halign = Align.END;
+            close.valign = Align.START;
+            close.margin_top = 4;
+            close.margin_end = 4;
+            close.clicked.connect(() => {
+                if (h != null) Singularity.close_window(h);
+                GLib.Idle.add(() => {
+                    dismiss_window_previews();
+                    return GLib.Source.REMOVE;
+                });
+            });
+            overlay.add_overlay(close);
+
+            var click = new Gtk.GestureClick();
+            click.pressed.connect(() => {
+                if (h != null) Singularity.wayland_activate_window(h);
+                dismiss_window_previews();
+            });
+            pic.add_controller(click);
+
+            return overlay;
+        }
+
+        private void show_window_previews(Gtk.Widget anchor, string app_id) {
+            var wins = new Gee.ArrayList<AppSystem.Window>();
+            foreach (var win in app_system.get_windows()) {
+                if (win.app_id != null && dock_matches(app_id, win.app_id)) wins.add(win);
+            }
+            if (wins.size < 2) return;
+
+            dismiss_window_previews();
+
+            var pop = new Gtk.Popover();
+            pop.autohide = false;
+            pop.has_arrow = false;
+            pop.add_css_class("dock-window-previews");
+            var edge = _dock_edge();
+            pop.position = (edge == GtkLayerShell.Edge.LEFT) ? Gtk.PositionType.RIGHT
+                : (edge == GtkLayerShell.Edge.RIGHT) ? Gtk.PositionType.LEFT
+                : Gtk.PositionType.TOP;
+
+            var row = new Gtk.Box(Orientation.HORIZONTAL, 8);
+            row.add_css_class("dock-window-previews-row");
+            pop.set_child(row);
+            foreach (var win in wins) row.append(build_preview_tile(win));
+
+            var pm = new Gtk.EventControllerMotion();
+            pm.enter.connect((x, y) => cancel_preview_dismiss());
+            pm.leave.connect(() => schedule_preview_dismiss());
+            ((Gtk.Widget) pop).add_controller(pm);
+
+            pop.set_parent(anchor);
+            _preview_popover = pop;
+            _preview_open = true;
+            update_autohide_state();
+            pop.popup();
         }
 
         /** True when the dock is on the left or right edge (vertical layout). */
@@ -1902,6 +2026,10 @@ namespace Singularity {
                     pill_weak.add_css_class("expanded");
                     rev_weak.reveal_child = true;
                 }
+                if (_settings.get_boolean("dock-window-previews")) {
+                    cancel_preview_dismiss();
+                    show_window_previews(pill_weak, app_id);
+                }
             });
             hover.leave.connect(() => {
                 if (!_kept_expanded.contains(app_id) && rev_weak.reveal_child) {
@@ -1909,6 +2037,7 @@ namespace Singularity {
                     rev_weak.reveal_child = false;
                     unpin_expansion();
                 }
+                if (_preview_popover != null) schedule_preview_dismiss();
             });
             pill.add_controller(hover);
 
