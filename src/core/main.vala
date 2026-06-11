@@ -135,6 +135,7 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
         settings.changed["icon-theme"].connect(apply_icon_theme);
         apply_cursor_theme();
         settings.changed["cursor-theme"].connect(apply_cursor_theme);
+        apply_x_font_settings();
         Singularity.AppSystem.get_default();
         // Launch the user's autostart entries once the session has settled
         // (bus, portals); nothing else in the shell did this before (#170).
@@ -1211,6 +1212,22 @@ window.inactive.shadow.color: %s
             } catch (GLib.Error e) {
                 warning("autostart: failed to launch %s: %s", name, e.message);
             }
+        }
+    }
+
+    private void apply_x_font_settings() {
+        if (GLib.Environment.get_variable("DISPLAY") == null) return;
+        string res = "Xft.antialias:\t1\n"
+            + "Xft.hinting:\t1\n"
+            + "Xft.hintstyle:\thintslight\n"
+            + "Xft.rgba:\trgb\n"
+            + "Xft.lcdfilter:\tlcddefault\n";
+        try {
+            var xrdb = new GLib.Subprocess(GLib.SubprocessFlags.STDIN_PIPE
+                | GLib.SubprocessFlags.STDERR_SILENCE, "xrdb", "-merge");
+            xrdb.communicate_utf8_async(res, null, null);
+        } catch (GLib.Error e) {
+            warning("x font settings: xrdb merge failed: %s", e.message);
         }
     }
 
