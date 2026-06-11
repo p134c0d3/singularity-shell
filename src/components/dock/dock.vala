@@ -1363,6 +1363,7 @@ namespace Singularity {
             for (int i = 0; i < dot_count; i++) {
                 var d = new Box(Orientation.HORIZONTAL, 0);
                 d.add_css_class("dock-indicator-dot");
+                d.valign = Align.CENTER;
                 indicator_row.append(d);
             }
         }
@@ -1533,10 +1534,16 @@ namespace Singularity {
         }
 
         private int count_app_windows(string app_id) {
-            foreach (var running_id in app_system.get_running_apps()) {
-                if (dock_matches(app_id, running_id)) return 1;
+            int n = 0;
+            foreach (var win in app_system.get_windows()) {
+                if (win.app_id != null && dock_matches(app_id, win.app_id)) n++;
             }
-            return 0;
+            if (n == 0) {
+                foreach (var running_id in app_system.get_running_apps()) {
+                    if (dock_matches(app_id, running_id)) return 1;
+                }
+            }
+            return n;
         }
 
         // Returns the handle of the first window matching app_id, null if none
