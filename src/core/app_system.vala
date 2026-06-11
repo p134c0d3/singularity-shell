@@ -428,7 +428,7 @@ namespace Singularity {
                 current_idx++;
             }
             if (target_ws != null) {
-                Singularity.wayland_assign_toplevel(target_ws.handle, win.handle);
+                Singularity.wayland_move_to_workspace(win.handle, (uint32)workspace_index);
                 foreach (var ws in workspaces) {
                     if (ws.windows.find(win) != null) {
                         ws.windows.remove(win);
@@ -466,7 +466,17 @@ namespace Singularity {
 
         public void move_window_to_workspace(Window? win, Workspace ws) {
             if (win == null) return;
-            Singularity.wayland_assign_toplevel(ws.handle, win.handle);
+            int target_index = -1;
+            int idx = 0;
+            foreach (var w in workspaces) {
+                if (w == ws) {
+                    target_index = idx;
+                    break;
+                }
+                idx++;
+            }
+            if (target_index < 0) return;
+            Singularity.wayland_move_to_workspace(win.handle, (uint32)target_index);
             foreach (var w in workspaces) {
                 if (w.windows.find(win) != null) {
                     w.windows.remove(win);

@@ -96,6 +96,9 @@ namespace Singularity {
     [CCode (cname = "singularity_wayland_snap_view")]
     public void wayland_snap_view(void* toplevel_handle, uint32 direction);
 
+    [CCode (cname = "singularity_wayland_move_to_workspace")]
+    public void wayland_move_to_workspace(void* toplevel_handle, uint32 workspace_index);
+
     [CCode (cname = "singularity_wayland_set_night_light")]
     public void wayland_set_night_light(int temperature);
 

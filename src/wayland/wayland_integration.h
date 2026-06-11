@@ -58,6 +58,7 @@ int singularity_wayland_get_window_geometry(void* toplevel_handle,
         int* x, int* y, int* w, int* h, int* maximized, int* fullscreen, char** connector);
 void singularity_wayland_set_tiled(void* toplevel_handle, uint32_t tiled);
 void singularity_wayland_snap_view(void* toplevel_handle, uint32_t direction);
+void singularity_wayland_move_to_workspace(void* toplevel_handle, uint32_t workspace_index);
 
 /* Night light via wlr-gamma-control.
  * temperature: colour temperature in Kelvin (e.g. 4500 for warm, 6500 for neutral).

@@ -1028,7 +1028,7 @@ static void registry_handle_global(void *data, struct wl_registry *registry, uin
         ctx.output_manager = wl_registry_bind(registry, name, &zwlr_output_manager_v1_interface, 4);
         zwlr_output_manager_v1_add_listener(ctx.output_manager, &output_manager_listener, NULL);
     } else if (strcmp(interface, zsingularity_tiling_manager_v1_interface.name) == 0) {
-        uint32_t v = version < 2 ? version : 2;
+        uint32_t v = version < 3 ? version : 3;
         ctx.tiling_manager = wl_registry_bind(registry, name, &zsingularity_tiling_manager_v1_interface, v);
         if (v >= 2)
             zsingularity_tiling_manager_v1_add_listener(ctx.tiling_manager, &tiling_listener, NULL);
@@ -1369,6 +1369,20 @@ void singularity_wayland_snap_view(void* toplevel_handle, uint32_t direction) {
     }
     struct zwlr_foreign_toplevel_handle_v1 *toplevel = (struct zwlr_foreign_toplevel_handle_v1 *)toplevel_handle;
     zsingularity_tiling_manager_v1_snap_view(ctx.tiling_manager, toplevel, direction);
+    wl_display_flush(ctx.display);
+}
+void singularity_wayland_move_to_workspace(void* toplevel_handle, uint32_t workspace_index) {
+    if (!ctx.tiling_manager) return;
+    if (wl_proxy_get_version((struct wl_proxy *)ctx.tiling_manager) < 3) {
+        if (wl_debug()) g_message("[Wayland] move_to_workspace unsupported by compositor (tiling < v3); skipping");
+        return;
+    }
+    if (!ctx.valid_handles || !g_hash_table_contains(ctx.valid_handles, toplevel_handle)) {
+        if (wl_debug()) g_message("[Wayland] move_to_workspace skipped: handle %p is no longer valid", toplevel_handle);
+        return;
+    }
+    struct zwlr_foreign_toplevel_handle_v1 *toplevel = (struct zwlr_foreign_toplevel_handle_v1 *)toplevel_handle;
+    zsingularity_tiling_manager_v1_move_to_workspace(ctx.tiling_manager, toplevel, workspace_index);
     wl_display_flush(ctx.display);
 }
 
