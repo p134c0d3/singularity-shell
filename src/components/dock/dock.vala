@@ -1381,7 +1381,7 @@ namespace Singularity {
 
         private void schedule_preview_dismiss() {
             cancel_preview_dismiss();
-            _preview_dismiss_id = GLib.Timeout.add(250, () => {
+            _preview_dismiss_id = GLib.Timeout.add(120, () => {
                 _preview_dismiss_id = 0;
                 dismiss_window_previews();
                 return GLib.Source.REMOVE;
@@ -1790,6 +1790,7 @@ namespace Singularity {
                     foreach (string action_id in actions) {
                         string captured_id = action_id.dup();
                         string action_name = dai.get_action_name(captured_id);
+                        if (action_name.down().contains("new window")) continue;
                         menu.add_item(action_name, "go-next-symbolic", () => {
                             dai.launch_action(captured_id, Gdk.Display.get_default().get_app_launch_context());
                         });

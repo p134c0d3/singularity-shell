@@ -810,9 +810,15 @@ namespace Singularity {
 
         private Gee.HashSet<string> atspi_no_menu = new Gee.HashSet<string>();
 
+        private static bool global_menu_denylisted(string app_id) {
+            string lid = app_id.down();
+            return lid.contains("firefox") || lid.contains("mozilla");
+        }
+
         private void try_atspi(int gen, string safe_id, SimpleActionGroup group) {
             if (menu_generation != gen) return;
             if (atspi_no_menu.contains(safe_id)) return;
+            if (global_menu_denylisted(safe_id)) { atspi_no_menu.add(safe_id); return; }
             if (!atspi_bus_usable()) return;
             string captured_id = safe_id.dup();
             AtSpiMenuProvider.build_menu_async(captured_id, group, (menu) => {
