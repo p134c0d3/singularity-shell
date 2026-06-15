@@ -1433,7 +1433,7 @@ namespace Singularity {
             title.max_width_chars = 18;
             overlay.add_overlay(title);
 
-            var close = new Singularity.Widgets.CircularButton("window-close-symbolic", _("Close"), 16);
+            var close = new Singularity.Widgets.CircularButton("window-close-symbolic", _("Close"), 12);
             close.halign = Align.END;
             close.valign = Align.START;
             close.margin_top = 4;
@@ -1458,6 +1458,7 @@ namespace Singularity {
         }
 
         private void show_window_previews(Gtk.Widget anchor, string app_id) {
+            if (_menu_open) return;
             var wins = new Gee.ArrayList<AppSystem.Window>();
             foreach (var win in app_system.get_windows()) {
                 if (win.app_id != null && dock_matches(app_id, win.app_id)) wins.add(win);
@@ -2082,6 +2083,7 @@ namespace Singularity {
             right_click.button = Gdk.BUTTON_SECONDARY;
             unowned GestureClick rc_weak = right_click;
             right_click.pressed.connect((n, x, y) => {
+                dismiss_window_previews();
                 int current_win_count = count_app_windows(app_id);
                 bool shift = (rc_weak.get_current_event_state() & Gdk.ModifierType.SHIFT_MASK) != 0;
                 show_app_context_menu(btn_weak, app_id, app_info, current_win_count, is_pinned_app, shift);
