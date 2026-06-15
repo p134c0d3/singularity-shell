@@ -29,6 +29,7 @@ namespace Singularity {
         private Gee.List<Gdk.Monitor> secondary_monitors = new ArrayList<Gdk.Monitor>();
         private bool autohide = false;
         private bool intellihide = false;
+        private bool _enabled = true;
         private bool _hovered = false;
         private bool _hidden = false;
         private bool _overview_active = false;
@@ -52,6 +53,7 @@ namespace Singularity {
         private int _expanded_count = 0;
         private Gtk.Popover? _preview_popover = null;
         private uint _preview_dismiss_id = 0;
+        private uint _preview_show_id = 0;
         private bool _preview_open = false;
         private bool _dock_pinned = false;
         private Singularity.DockDBusService? _dbus_service = null;
@@ -185,6 +187,18 @@ namespace Singularity {
                     intellihide = _settings.get_boolean("dock-intellihide");
                     update_autohide_state();
                 }
+                if (key == "dock-enabled") {
+                    _enabled = _settings.get_boolean("dock-enabled");
+                    if (!_enabled) {
+                        ((Gtk.Widget) this).hide();
+                        set_exclusive_zone(this, 0);
+                        app_system.shell_dock_height = 0;
+                        _set_reveal_barrier_active(false);
+                    } else {
+                        present();
+                        update_settings();
+                    }
+                }
             });
 
             _sig_apps_changed = app_system.apps_changed.connect(schedule_refresh);
@@ -305,6 +319,7 @@ namespace Singularity {
         }
 
         private void update_settings() {
+            _enabled = _settings.get_boolean("dock-enabled");
             autohide = _settings.get_boolean("dock-autohide");
             intellihide = _settings.get_boolean("dock-intellihide");
             update_style();
@@ -535,6 +550,7 @@ namespace Singularity {
         public signal void dock_visibility_changed(bool hidden);
 
         private void update_autohide_state() {
+            if (!_enabled) return;
             if (visibility_mode == "overview-only" && !_overview_active) return;
             if (_last_dimension <= 10) return;
 
@@ -851,6 +867,13 @@ namespace Singularity {
         }
 
         private void update_visibility_mode() {
+            if (!_enabled) {
+                ((Gtk.Widget) this).hide();
+                set_exclusive_zone(this, 0);
+                app_system.shell_dock_height = 0;
+                _set_reveal_barrier_active(false);
+                return;
+            }
             visibility_mode = _settings.get_string("dock-visibility-mode");
 
             if (panel_fusion) {
@@ -907,6 +930,7 @@ namespace Singularity {
                 // committed, so closing a focused fullscreen window left the
                 // dock buried. Remap to force a fresh buffer and present.
                 ((Gtk.Widget) this).hide();
+                present();
                 update_visibility_mode();
                 pulse_frame_clock();
             }
@@ -1388,12 +1412,41 @@ namespace Singularity {
             });
         }
 
+        private void cancel_preview_show() {
+            if (_preview_show_id != 0) {
+                GLib.Source.remove(_preview_show_id);
+                _preview_show_id = 0;
+            }
+        }
+
+        private void arm_preview_show(Gtk.Widget anchor, string app_id) {
+            if (!_settings.get_boolean("dock-window-previews")) return;
+            if (_preview_open || _preview_show_id != 0) return;
+            _preview_show_id = GLib.Timeout.add(350, () => {
+                _preview_show_id = 0;
+                show_window_previews(anchor, app_id);
+                return GLib.Source.REMOVE;
+            });
+        }
+
         private void dismiss_window_previews() {
             cancel_preview_dismiss();
+            cancel_preview_show();
             if (_preview_popover != null) {
-                _preview_popover.popdown();
-                _preview_popover.unparent();
+                var pop = _preview_popover;
                 _preview_popover = null;
+                var rev = pop.get_child() as Gtk.Revealer;
+                if (rev != null && rev.reveal_child) {
+                    rev.reveal_child = false;
+                    GLib.Timeout.add(rev.transition_duration, () => {
+                        pop.popdown();
+                        pop.unparent();
+                        return GLib.Source.REMOVE;
+                    });
+                } else {
+                    pop.popdown();
+                    pop.unparent();
+                }
             }
             if (_preview_open) {
                 _preview_open = false;
@@ -1478,8 +1531,17 @@ namespace Singularity {
 
             var row = new Gtk.Box(Orientation.HORIZONTAL, 8);
             row.add_css_class("dock-window-previews-row");
-            pop.set_child(row);
             foreach (var win in wins) row.append(build_preview_tile(win));
+
+            var revealer = new Gtk.Revealer();
+            revealer.transition_duration = 160;
+            revealer.transition_type = (edge == GtkLayerShell.Edge.LEFT) ? Gtk.RevealerTransitionType.SLIDE_RIGHT
+                : (edge == GtkLayerShell.Edge.RIGHT) ? Gtk.RevealerTransitionType.SLIDE_LEFT
+                : (edge == GtkLayerShell.Edge.TOP) ? Gtk.RevealerTransitionType.SLIDE_DOWN
+                : Gtk.RevealerTransitionType.SLIDE_UP;
+            revealer.reveal_child = false;
+            revealer.set_child(row);
+            pop.set_child(revealer);
 
             var pm = new Gtk.EventControllerMotion();
             pm.enter.connect((x, y) => cancel_preview_dismiss());
@@ -1491,6 +1553,10 @@ namespace Singularity {
             _preview_open = true;
             update_autohide_state();
             pop.popup();
+            GLib.Idle.add(() => {
+                if (_preview_popover == pop) revealer.reveal_child = true;
+                return GLib.Source.REMOVE;
+            });
         }
 
         /** True when the dock is on the left or right edge (vertical layout). */
@@ -2028,10 +2094,12 @@ namespace Singularity {
                     pill_weak.add_css_class("expanded");
                     rev_weak.reveal_child = true;
                 }
-                if (_settings.get_boolean("dock-window-previews")) {
-                    cancel_preview_dismiss();
-                    show_window_previews(pill_weak, app_id);
-                }
+                cancel_preview_dismiss();
+                arm_preview_show(pill_weak, app_id);
+            });
+            hover.motion.connect((x, y) => {
+                cancel_preview_dismiss();
+                arm_preview_show(pill_weak, app_id);
             });
             hover.leave.connect(() => {
                 if (!_kept_expanded.contains(app_id) && rev_weak.reveal_child) {
@@ -2039,6 +2107,7 @@ namespace Singularity {
                     rev_weak.reveal_child = false;
                     unpin_expansion();
                 }
+                cancel_preview_show();
                 if (_preview_popover != null) schedule_preview_dismiss();
             });
             pill.add_controller(hover);
@@ -2055,6 +2124,19 @@ namespace Singularity {
             unowned Gtk.Box wrapper_weak = wrapper;
             unowned Button btn_weak = btn;
             btn.clicked.connect(() => {
+                var app_wins = new Gee.ArrayList<AppSystem.Window>();
+                foreach (var w in app_system.get_windows())
+                    if (w.app_id != null && dock_matches(app_id, w.app_id)) app_wins.add(w);
+
+                if (app_wins.size > 1) {
+                    var focused = app_system.get_focused_window_handle();
+                    int cur = -1;
+                    for (int i = 0; i < app_wins.size; i++)
+                        if (app_wins[i].handle == focused) { cur = i; break; }
+                    Singularity.wayland_activate_window(app_wins[(cur + 1) % app_wins.size].handle);
+                    return;
+                }
+
                 void* handle = get_window_handle_for_app(app_id);
                 if (handle != null) {
                     var focused = app_system.get_focused_window_handle();

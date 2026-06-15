@@ -858,6 +858,12 @@ namespace Singularity {
             ws_group.add_row(count_row);
             add_group(ws_group);
             var dock_group = new PreferencesGroup(_("Dock"));
+            var enabled_row = new SwitchRow(_("Enable Dock"), _("Show the dock"), settings.get_boolean("dock-enabled"));
+            enabled_row.switch_btn.notify["active"].connect(() => {
+                settings.set_boolean("dock-enabled", enabled_row.switch_btn.active);
+            });
+            dock_group.add_row(enabled_row);
+
             var vis_row = new SwitchRow("Always Visible", "Show dock on desktop", settings.get_string("dock-visibility-mode") == "always");
             vis_row.switch_btn.notify["active"].connect(() => {
                 settings.set_string("dock-visibility-mode", vis_row.switch_btn.active ? "always" : "overview-only");
