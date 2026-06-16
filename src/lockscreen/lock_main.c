@@ -30,6 +30,9 @@
 
 #include "ext-session-lock-v1-client-protocol.h"
 #include "pam_auth.h"
+#include "lock_media.h"
+
+#define BTN_LEFT 0x110
 
 static cairo_surface_t *bg_surface = NULL;
 static cairo_surface_t *avatar_surface = NULL;
@@ -41,6 +44,8 @@ struct lock_output {
     struct ext_session_lock_surface_v1 *lock_surface;
     uint32_t width, height;
     bool configured;
+    double mb_cx[3], mb_r[3], mb_cy;
+    bool mb_valid;
     struct lock_output *next;
 };
 
@@ -49,6 +54,9 @@ static struct wl_compositor *compositor;
 static struct wl_shm *shm;
 static struct wl_seat *seat;
 static struct wl_keyboard *keyboard;
+static struct wl_pointer *pointer;
+static struct lock_output *ptr_output;
+static double ptr_x, ptr_y;
 static struct ext_session_lock_manager_v1 *lock_manager;
 static struct ext_session_lock_v1 *lock;
 static struct lock_output *outputs;
@@ -255,6 +263,144 @@ static void load_avatar(void) {
     g_object_unref(pb);
 }
 
+static void draw_text_ellipsized(cairo_t *cr, const char *desc, const char *text,
+                                 double x, double y, double max_w,
+                                 double r, double g, double b) {
+    PangoLayout *layout = pango_cairo_create_layout(cr);
+    PangoFontDescription *fd = pango_font_description_from_string(desc);
+    pango_layout_set_font_description(layout, fd);
+    pango_font_description_free(fd);
+    pango_layout_set_text(layout, text, -1);
+    pango_layout_set_width(layout, (int)(max_w * PANGO_SCALE));
+    pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
+    cairo_set_source_rgb(cr, r, g, b);
+    cairo_move_to(cr, x, y);
+    pango_cairo_show_layout(cr, layout);
+    g_object_unref(layout);
+}
+
+/* kind: 0 prev, 1 play, 2 pause, 3 next */
+static void media_button(cairo_t *cr, double cx, double cy, double r, int kind,
+                         bool enabled, bool filled) {
+    if (filled) {
+        cairo_arc(cr, cx, cy, r, 0, 2 * 3.14159265);
+        cairo_set_source_rgba(cr, 1, 1, 1, 0.14);
+        cairo_fill(cr);
+    }
+    cairo_set_source_rgba(cr, 0.96, 0.96, 0.98, enabled ? 0.96 : 0.35);
+    double s = r * (filled ? 0.42 : 0.5);
+    switch (kind) {
+    case 1:
+        cairo_move_to(cr, cx - s * 0.7, cy - s);
+        cairo_line_to(cr, cx - s * 0.7, cy + s);
+        cairo_line_to(cr, cx + s, cy);
+        cairo_close_path(cr);
+        cairo_fill(cr);
+        break;
+    case 2:
+        cairo_rectangle(cr, cx - s * 0.7, cy - s, s * 0.55, 2 * s);
+        cairo_rectangle(cr, cx + s * 0.15, cy - s, s * 0.55, 2 * s);
+        cairo_fill(cr);
+        break;
+    case 0:
+        cairo_rectangle(cr, cx - s, cy - s, s * 0.35, 2 * s);
+        cairo_fill(cr);
+        cairo_move_to(cr, cx + s, cy - s);
+        cairo_line_to(cr, cx + s, cy + s);
+        cairo_line_to(cr, cx - s * 0.4, cy);
+        cairo_close_path(cr);
+        cairo_fill(cr);
+        break;
+    case 3:
+        cairo_move_to(cr, cx - s, cy - s);
+        cairo_line_to(cr, cx - s, cy + s);
+        cairo_line_to(cr, cx + s * 0.4, cy);
+        cairo_close_path(cr);
+        cairo_fill(cr);
+        cairo_rectangle(cr, cx + s * 0.65, cy - s, s * 0.35, 2 * s);
+        cairo_fill(cr);
+        break;
+    }
+}
+
+static void render_media(cairo_t *cr, struct lock_output *o,
+                         double card_x, double card_y, double card_w, double card_h) {
+    const LockMediaState *m = lock_media_get();
+    if (!m->has_player) { o->mb_valid = false; return; }
+
+    double pad = 12, cover = 64;
+    double px = card_x, pw = card_w;
+    double ph = pad * 2 + cover;
+    double py = card_y + card_h + 14;
+    double cy = py + ph / 2.0;
+
+    /* Card body: solid base, then the cover art as a dim, scaled background
+     * with a dark veil (mirrors the sidebar media widget). */
+    rounded_rect(cr, px, py, pw, ph, 18);
+    cairo_set_source_rgba(cr, 0.176, 0.176, 0.176, 0.97);
+    cairo_fill(cr);
+    if (m->cover) {
+        rounded_rect(cr, px, py, pw, ph, 18);
+        cairo_save(cr);
+        cairo_clip(cr);
+        int cw = cairo_image_surface_get_width(m->cover);
+        int chh = cairo_image_surface_get_height(m->cover);
+        double sc = pw / (double)cw;
+        if (ph / (double)chh > sc) sc = ph / (double)chh;
+        cairo_translate(cr, px + (pw - cw * sc) / 2.0, py + (ph - chh * sc) / 2.0);
+        cairo_scale(cr, sc, sc);
+        cairo_set_source_surface(cr, m->cover, 0, 0);
+        cairo_paint_with_alpha(cr, 0.20);
+        cairo_restore(cr);
+        rounded_rect(cr, px, py, pw, ph, 18);
+        cairo_set_source_rgba(cr, 0, 0, 0, 0.50);
+        cairo_fill(cr);
+    }
+    rounded_rect(cr, px + 0.5, py + 0.5, pw - 1, ph - 1, 18);
+    cairo_set_source_rgba(cr, 1, 1, 1, 0.08);
+    cairo_set_line_width(cr, 1);
+    cairo_stroke(cr);
+
+    /* Sharp cover thumbnail on the left. */
+    double cx0 = px + pad, cy0 = py + pad;
+    rounded_rect(cr, cx0, cy0, cover, cover, 10);
+    cairo_save(cr);
+    cairo_clip(cr);
+    if (m->cover) {
+        int cw = cairo_image_surface_get_width(m->cover);
+        int chh = cairo_image_surface_get_height(m->cover);
+        double sc = cover / (double)(cw < chh ? cw : chh);
+        cairo_translate(cr, cx0 + (cover - cw * sc) / 2.0, cy0 + (cover - chh * sc) / 2.0);
+        cairo_scale(cr, sc, sc);
+        cairo_set_source_surface(cr, m->cover, 0, 0);
+        cairo_paint(cr);
+    } else {
+        cairo_set_source_rgba(cr, 1, 1, 1, 0.06);
+        cairo_paint(cr);
+    }
+    cairo_restore(cr);
+
+    /* Controls on the right, vertically centred (prev / play-pause / next). */
+    double big = 17, small = 15;
+    o->mb_r[2] = small; o->mb_cx[2] = px + pw - pad - small;
+    o->mb_r[1] = big;   o->mb_cx[1] = o->mb_cx[2] - small - 6 - big;
+    o->mb_r[0] = small; o->mb_cx[0] = o->mb_cx[1] - big - 6 - small;
+    o->mb_cy = cy;
+    o->mb_valid = true;
+    media_button(cr, o->mb_cx[0], cy, small, 0, m->can_prev, false);
+    media_button(cr, o->mb_cx[1], cy, big, m->playing ? 2 : 1, true, true);
+    media_button(cr, o->mb_cx[2], cy, small, 3, m->can_next, false);
+
+    /* Title + artist between the thumbnail and the controls, ellipsized. */
+    double tx = cx0 + cover + 12;
+    double tw = (o->mb_cx[0] - small - 8) - tx;
+    if (tw < 20) tw = 20;
+    const char *title = m->title[0] ? m->title : "Unknown";
+    draw_text_ellipsized(cr, "Sans Bold 13", title, tx, cy - 21, tw, 0.96, 0.96, 0.98);
+    if (m->artist[0])
+        draw_text_ellipsized(cr, "Sans 11", m->artist, tx, cy + 1, tw, 0.78, 0.78, 0.82);
+}
+
 static void render_output(struct lock_output *o) {
     cairo_t *cr;
     struct buffer *b = create_buffer(o->width, o->height, &cr);
@@ -367,6 +513,8 @@ static void render_output(struct lock_output *o) {
             draw_text(cr, "Sans 12", status_text, fx + fw / 2.0, sy + (sh - sht) / 2.0, 1, 0.82, 0.82, 0.85);
     }
 
+    render_media(cr, o, card_x, card_y, card_w, card_h);
+
     cairo_destroy(cr);
 
     wl_surface_attach(o->surface, b->wl_buffer, 0, 0);
@@ -476,6 +624,16 @@ static void kb_key(void *data, struct wl_keyboard *kb, uint32_t serial,
         password_len = 0; password[0] = '\0'; status_text[0] = '\0';
         render_all();
         return;
+    case XKB_KEY_XF86AudioPlay:
+    case XKB_KEY_XF86AudioPause:
+        lock_media_play_pause();
+        return;
+    case XKB_KEY_XF86AudioNext:
+        lock_media_next();
+        return;
+    case XKB_KEY_XF86AudioPrev:
+        lock_media_prev();
+        return;
     default: break;
     }
 
@@ -491,6 +649,50 @@ static void kb_key(void *data, struct wl_keyboard *kb, uint32_t serial,
 static const struct wl_keyboard_listener keyboard_listener = {
     .keymap = kb_keymap, .enter = kb_enter, .leave = kb_leave,
     .key = kb_key, .modifiers = kb_modifiers, .repeat_info = kb_repeat,
+};
+
+/* ── Pointer (media buttons) ─────────────────────────────────────────────── */
+
+static void pt_enter(void *d, struct wl_pointer *p, uint32_t serial,
+                     struct wl_surface *sf, wl_fixed_t sx, wl_fixed_t sy) {
+    ptr_output = NULL;
+    for (struct lock_output *o = outputs; o; o = o->next)
+        if (o->surface == sf) { ptr_output = o; break; }
+    ptr_x = wl_fixed_to_double(sx);
+    ptr_y = wl_fixed_to_double(sy);
+}
+static void pt_leave(void *d, struct wl_pointer *p, uint32_t serial, struct wl_surface *sf) {
+    ptr_output = NULL;
+}
+static void pt_motion(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t sx, wl_fixed_t sy) {
+    ptr_x = wl_fixed_to_double(sx);
+    ptr_y = wl_fixed_to_double(sy);
+}
+static void pt_button(void *d, struct wl_pointer *p, uint32_t serial, uint32_t time,
+                      uint32_t button, uint32_t btn_state) {
+    if (button != BTN_LEFT || btn_state != WL_POINTER_BUTTON_STATE_PRESSED) return;
+    if (!ptr_output || !ptr_output->mb_valid) return;
+    for (int i = 0; i < 3; i++) {
+        double r = ptr_output->mb_r[i] + 6;
+        double dx = ptr_x - ptr_output->mb_cx[i];
+        double dy = ptr_y - ptr_output->mb_cy;
+        if (dx * dx + dy * dy <= r * r) {
+            if (i == 0) lock_media_prev();
+            else if (i == 1) lock_media_play_pause();
+            else lock_media_next();
+            break;
+        }
+    }
+}
+static void pt_axis(void *d, struct wl_pointer *p, uint32_t t, uint32_t axis, wl_fixed_t value) {}
+static void pt_frame(void *d, struct wl_pointer *p) {}
+static void pt_axis_source(void *d, struct wl_pointer *p, uint32_t src) {}
+static void pt_axis_stop(void *d, struct wl_pointer *p, uint32_t t, uint32_t axis) {}
+static void pt_axis_discrete(void *d, struct wl_pointer *p, uint32_t axis, int32_t discrete) {}
+static const struct wl_pointer_listener pointer_listener = {
+    .enter = pt_enter, .leave = pt_leave, .motion = pt_motion, .button = pt_button,
+    .axis = pt_axis, .frame = pt_frame, .axis_source = pt_axis_source,
+    .axis_stop = pt_axis_stop, .axis_discrete = pt_axis_discrete,
 };
 
 /* ── Registry ───────────────────────────────────────────────────────────── */
@@ -536,6 +738,11 @@ static const struct wl_registry_listener registry_listener = { reg_global, reg_r
 
 /* ── Main ───────────────────────────────────────────────────────────────── */
 
+static void on_media_change(void) {
+    render_all();
+    if (display) wl_display_flush(display);
+}
+
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
 
@@ -561,26 +768,61 @@ int main(int argc, char **argv) {
     xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     keyboard = wl_seat_get_keyboard(seat);
     if (keyboard) wl_keyboard_add_listener(keyboard, &keyboard_listener, NULL);
+    pointer = wl_seat_get_pointer(seat);
+    if (pointer) wl_pointer_add_listener(pointer, &pointer_listener, NULL);
 
     lock = ext_session_lock_manager_v1_lock(lock_manager);
     ext_session_lock_v1_add_listener(lock, &lock_listener, NULL);
     wl_display_roundtrip(display);
 
+    /* MPRIS now-playing controls run on the GLib main context, which is
+     * folded into the Wayland poll below so D-Bus signals are dispatched
+     * without a second thread. */
+    lock_media_init(on_media_change);
+
+    GMainContext *ctx = g_main_context_default();
     int fd = wl_display_get_fd(display);
     int last_min = -1;
+    GPollFD gfds[64];
     while (running) {
         while (wl_display_prepare_read(display) != 0)
             wl_display_dispatch_pending(display);
         wl_display_flush(display);
 
-        struct pollfd pfd = { .fd = fd, .events = POLLIN };
-        int pr = poll(&pfd, 1, 1000);
-        if (pr > 0 && (pfd.revents & POLLIN)) {
+        gboolean acq = g_main_context_acquire(ctx);
+        gint max_pri = 0, gl_timeout = -1;
+        int nf = 0;
+        if (acq) {
+            g_main_context_prepare(ctx, &max_pri);
+            nf = g_main_context_query(ctx, max_pri, &gl_timeout, gfds, 64);
+        }
+
+        struct pollfd pfds[65];
+        pfds[0].fd = fd; pfds[0].events = POLLIN; pfds[0].revents = 0;
+        for (int i = 0; i < nf; i++) {
+            pfds[i + 1].fd = gfds[i].fd;
+            pfds[i + 1].events = gfds[i].events;
+            pfds[i + 1].revents = 0;
+        }
+
+        int timeout = 1000;
+        if (gl_timeout >= 0 && gl_timeout < timeout) timeout = gl_timeout;
+
+        int pr = poll(pfds, nf + 1, timeout);
+
+        if (pr > 0 && (pfds[0].revents & POLLIN)) {
             wl_display_read_events(display);
         } else {
             wl_display_cancel_read(display);
         }
         wl_display_dispatch_pending(display);
+
+        if (acq) {
+            for (int i = 0; i < nf; i++) gfds[i].revents = pfds[i + 1].revents;
+            g_main_context_check(ctx, max_pri, gfds, nf);
+            g_main_context_dispatch(ctx);
+            g_main_context_release(ctx);
+        }
 
         /* Repaint clock once a minute. */
         time_t now = time(NULL);

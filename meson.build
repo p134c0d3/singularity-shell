@@ -312,6 +312,7 @@ singularity_core_sources = files(
     'src/core/datetime_manager.vala',
     'src/core/locale_manager.vala',
     'src/core/bluetooth_manager.vala',
+    'src/core/now_playing_cache.vala',
     'src/core/display_manager.vala',
     'src/core/hot_corner_manager.vala',
     'src/core/monitor_osd.vala',
