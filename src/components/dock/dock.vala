@@ -55,6 +55,7 @@ namespace Singularity {
         private uint _preview_dismiss_id = 0;
         private uint _preview_show_id = 0;
         private bool _preview_open = false;
+        private string? _preview_app_id = null;
         private bool _dock_pinned = false;
         private Singularity.DockDBusService? _dbus_service = null;
         private GLib.Settings _settings;
@@ -1421,7 +1422,11 @@ namespace Singularity {
 
         private void arm_preview_show(Gtk.Widget anchor, string app_id) {
             if (!_settings.get_boolean("dock-window-previews")) return;
-            if (_preview_open || _preview_show_id != 0) return;
+            if (_preview_open && _preview_app_id != app_id) {
+                dismiss_window_previews();
+            } else if (_preview_open || _preview_show_id != 0) {
+                return;
+            }
             _preview_show_id = GLib.Timeout.add(350, () => {
                 _preview_show_id = 0;
                 show_window_previews(anchor, app_id);
@@ -1432,6 +1437,7 @@ namespace Singularity {
         private void dismiss_window_previews() {
             cancel_preview_dismiss();
             cancel_preview_show();
+            _preview_app_id = null;
             if (_preview_popover != null) {
                 var pop = _preview_popover;
                 _preview_popover = null;
@@ -1551,6 +1557,7 @@ namespace Singularity {
             pop.set_parent(anchor);
             _preview_popover = pop;
             _preview_open = true;
+            _preview_app_id = app_id;
             update_autohide_state();
             pop.popup();
             GLib.Idle.add(() => {
@@ -1848,7 +1855,9 @@ namespace Singularity {
                 });
             } else {
                 menu.add_item("New Window", "window-new-symbolic", () => {
-                    if (app_info != null) AppSystem.launch_app(app_info);
+                    if (app_info == null) return;
+                    if (!launch_new_window_action(app_info))
+                        AppSystem.launch_app(app_info);
                 });
                 var dai = app_info as DesktopAppInfo;
                 if (dai != null) {
@@ -1899,6 +1908,19 @@ namespace Singularity {
                 }
             }
             menu.popup();
+        }
+
+        private bool launch_new_window_action(GLib.AppInfo app_info) {
+            var dai = app_info as DesktopAppInfo;
+            if (dai == null) return false;
+            foreach (string aid in dai.list_actions()) {
+                string an = dai.get_action_name(aid).down();
+                if (an.contains("new window") || aid.down().contains("new-window")) {
+                    dai.launch_action(aid, Gdk.Display.get_default().get_app_launch_context());
+                    return true;
+                }
+            }
+            return false;
         }
 
         /**
