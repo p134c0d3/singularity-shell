@@ -19,6 +19,15 @@ namespace Singularity {
         // Result of a user-initiated VPN action (import / manual add / remove).
         public signal void vpn_action_result(bool success, string message);
 
+        public bool wifi_hotspot_active { get; private set; default = false; }
+        public bool ethernet_sharing_active { get; private set; default = false; }
+        public bool has_ethernet { get; private set; default = false; }
+        public signal void hotspot_state_changed();
+        public signal void sharing_action_result(bool success, string message);
+
+        private const string HOTSPOT_ID = "Singularity Hotspot";
+        private const string WIRED_SHARE_ID = "Singularity Wired Sharing";
+
         // Normalised connection state, shared by OpenVPN-style and WireGuard
         // connections (which report state differently).
         public enum VpnLinkState { DISCONNECTED, CONNECTING, CONNECTED }
@@ -30,7 +39,9 @@ namespace Singularity {
 
         private NM.Client? client;
         private NM.DeviceWifi? wifi_device;
+        private GenericArray<NM.DeviceWifi> wifi_devices = new GenericArray<NM.DeviceWifi>();
         private NM.DeviceEthernet? ethernet_device;
+        private GenericArray<NM.DeviceEthernet> ethernet_devices = new GenericArray<NM.DeviceEthernet>();
 
         public NetworkManagerWrapper() {
             init_client.begin();
@@ -63,9 +74,11 @@ namespace Singularity {
                             });
                         }
                         update_vpn_state();
+                        refresh_sharing_state();
                     });
                     client.active_connection_removed.connect((active) => {
                         update_vpn_state();
+                        refresh_sharing_state();
                     });
                     client.connection_added.connect((conn) => {
                         vpn_connections_changed();
@@ -75,6 +88,7 @@ namespace Singularity {
                     });
                     update_state();
                     update_vpn_state();
+                    refresh_sharing_state();
                 }
             } catch (Error e) {
                 warning("Failed to initialize NetworkManager client: %s", e.message);
@@ -88,27 +102,36 @@ namespace Singularity {
             }
             var devices = client.get_devices();
             foreach (var device in devices) {
-                if (device is NM.DeviceWifi && wifi_device == null) {
-                    wifi_device = (NM.DeviceWifi)device;
-                    has_wifi = true;
-                    wifi_device.access_point_added.connect(() => {
-                        this.access_points_changed();
-                    });
-                    wifi_device.access_point_removed.connect(() => {
-                        this.access_points_changed();
-                    });
-                    wifi_device.notify["active-access-point"].connect(() => {
-                        update_state();
-                        var ap = wifi_device.get_active_access_point();
-                        if (ap != null) {
-                            ap.notify["strength"].connect(() => update_state());
-                        }
-                    });
-                } else if (device is NM.DeviceEthernet && ethernet_device == null) {
-                    ethernet_device = (NM.DeviceEthernet)device;
-                    ethernet_device.notify["state"].connect(() => {
-                        update_state();
-                    });
+                if (device is NM.DeviceWifi) {
+                    var wd = (NM.DeviceWifi) device;
+                    wifi_devices.add(wd);
+                    if (wifi_device == null) {
+                        wifi_device = wd;
+                        has_wifi = true;
+                        wifi_device.access_point_added.connect(() => {
+                            this.access_points_changed();
+                        });
+                        wifi_device.access_point_removed.connect(() => {
+                            this.access_points_changed();
+                        });
+                        wifi_device.notify["active-access-point"].connect(() => {
+                            update_state();
+                            var ap = wifi_device.get_active_access_point();
+                            if (ap != null) {
+                                ap.notify["strength"].connect(() => update_state());
+                            }
+                        });
+                    }
+                } else if (device is NM.DeviceEthernet) {
+                    var ed = (NM.DeviceEthernet) device;
+                    ethernet_devices.add(ed);
+                    if (ethernet_device == null) {
+                        ethernet_device = ed;
+                        has_ethernet = true;
+                        ethernet_device.notify["state"].connect(() => {
+                            update_state();
+                        });
+                    }
                 }
             }
             if (wifi_device == null) {
@@ -432,6 +455,192 @@ namespace Singularity {
                 });
             } catch (Error e) {
                 warning("Failed to create connection: %s", e.message);
+            }
+        }
+
+        public bool wifi_is_upstream() {
+            if (client == null) return false;
+            var active = client.primary_connection;
+            return active != null && active.get_connection_type() == "802-11-wireless";
+        }
+
+        private NM.DeviceWifi? get_free_wifi_device() {
+            for (int i = 0; i < wifi_devices.length; i++) {
+                var d = wifi_devices.get(i);
+                if (d.get_active_connection() == null) return d;
+            }
+            return null;
+        }
+
+        public bool hotspot_needs_disconnect() {
+            return get_free_wifi_device() == null && wifi_is_upstream();
+        }
+
+        public static string generate_password() {
+            const string chars = "abcdefghijkmnpqrstuvwxyz23456789";
+            var sb = new StringBuilder();
+            for (int i = 0; i < 8; i++)
+                sb.append_c(chars[Random.int_range(0, chars.length)]);
+            return sb.str;
+        }
+
+        private void delete_connections_by_id(string id) {
+            if (client == null) return;
+            foreach (var c in client.get_connections()) {
+                if (c.get_id() == id) {
+                    c.delete_async.begin(null, (o, r) => {
+                        try { c.delete_async.end(r); } catch (Error e) {}
+                    });
+                }
+            }
+        }
+
+        public void start_wifi_hotspot(string ssid, string password, bool wpa3) {
+            if (client == null || wifi_device == null) {
+                sharing_action_result(false, "No WiFi device available");
+                return;
+            }
+            delete_connections_by_id(HOTSPOT_ID);
+
+            var conn = (NM.SimpleConnection) GLib.Object.new(typeof(NM.SimpleConnection));
+            var s_con = (NM.SettingConnection) GLib.Object.new(typeof(NM.SettingConnection));
+            s_con.id = HOTSPOT_ID;
+            s_con.uuid = NM.Utils.uuid_generate();
+            ((GLib.Object) s_con).set("type", "802-11-wireless");
+            s_con.autoconnect = false;
+            conn.add_setting(s_con);
+
+            var s_wifi = (NM.SettingWireless) GLib.Object.new(typeof(NM.SettingWireless));
+            s_wifi.ssid = new Bytes(ssid.data);
+            ((GLib.Object) s_wifi).set("mode", "ap");
+            ((GLib.Object) s_wifi).set("band", "bg");
+            conn.add_setting(s_wifi);
+
+            var s_sec = (NM.SettingWirelessSecurity) GLib.Object.new(typeof(NM.SettingWirelessSecurity));
+            s_sec.key_mgmt = wpa3 ? "sae" : "wpa-psk";
+            s_sec.psk = password;
+            conn.add_setting(s_sec);
+
+            var s_ip4 = (NM.SettingIP4Config) GLib.Object.new(typeof(NM.SettingIP4Config));
+            s_ip4.method = "shared";
+            conn.add_setting(s_ip4);
+            var s_ip6 = (NM.SettingIP6Config) GLib.Object.new(typeof(NM.SettingIP6Config));
+            s_ip6.method = "ignore";
+            conn.add_setting(s_ip6);
+
+            var host_dev = get_free_wifi_device();
+            if (host_dev == null) host_dev = wifi_device;
+
+            client.add_and_activate_connection_async.begin(conn, host_dev, null, null, (obj, res) => {
+                try {
+                    client.add_and_activate_connection_async.end(res);
+                    sharing_action_result(true, "Hotspot started");
+                } catch (Error e) {
+                    sharing_action_result(false, "Could not start hotspot: " + e.message);
+                }
+            });
+        }
+
+        public void stop_wifi_hotspot() {
+            if (client == null) return;
+            foreach (var ac in client.get_active_connections()) {
+                var rc = ac.get_connection();
+                var sw = rc != null ? rc.get_setting_wireless() : null;
+                if (sw != null && sw.mode == "ap") {
+                    client.deactivate_connection_async.begin(ac, null, (o, r) => {
+                        try { client.deactivate_connection_async.end(r); } catch (Error e) {}
+                    });
+                }
+            }
+            delete_connections_by_id(HOTSPOT_ID);
+        }
+
+        private NM.DeviceEthernet? get_share_ethernet_device() {
+            string? up_iface = null;
+            if (client != null) {
+                var primary = client.primary_connection;
+                if (primary != null) {
+                    var devs = primary.get_devices();
+                    if (devs.length > 0) up_iface = devs.get(0).get_iface();
+                }
+            }
+            for (int i = 0; i < ethernet_devices.length; i++) {
+                var d = ethernet_devices.get(i);
+                if (up_iface != null && d.get_iface() == up_iface) continue;
+                return d;
+            }
+            return null;
+        }
+
+        public void start_ethernet_sharing() {
+            var dev = get_share_ethernet_device();
+            if (client == null || dev == null) {
+                sharing_action_result(false, "No spare wired port to share on");
+                return;
+            }
+            delete_connections_by_id(WIRED_SHARE_ID);
+
+            var conn = (NM.SimpleConnection) GLib.Object.new(typeof(NM.SimpleConnection));
+            var s_con = (NM.SettingConnection) GLib.Object.new(typeof(NM.SettingConnection));
+            s_con.id = WIRED_SHARE_ID;
+            s_con.uuid = NM.Utils.uuid_generate();
+            ((GLib.Object) s_con).set("type", "802-3-ethernet");
+            s_con.autoconnect = false;
+            conn.add_setting(s_con);
+
+            var s_eth = (NM.SettingWired) GLib.Object.new(typeof(NM.SettingWired));
+            conn.add_setting(s_eth);
+
+            var s_ip4 = (NM.SettingIP4Config) GLib.Object.new(typeof(NM.SettingIP4Config));
+            s_ip4.method = "shared";
+            conn.add_setting(s_ip4);
+            var s_ip6 = (NM.SettingIP6Config) GLib.Object.new(typeof(NM.SettingIP6Config));
+            s_ip6.method = "ignore";
+            conn.add_setting(s_ip6);
+
+            client.add_and_activate_connection_async.begin(conn, dev, null, null, (obj, res) => {
+                try {
+                    client.add_and_activate_connection_async.end(res);
+                    sharing_action_result(true, "Wired sharing started");
+                } catch (Error e) {
+                    sharing_action_result(false, "Could not start wired sharing: " + e.message);
+                }
+            });
+        }
+
+        public void stop_ethernet_sharing() {
+            if (client == null) return;
+            foreach (var ac in client.get_active_connections()) {
+                if (ac.get_connection_type() != "802-3-ethernet") continue;
+                var rc = ac.get_connection();
+                var ip4 = rc != null ? rc.get_setting_ip4_config() : null;
+                if (ip4 != null && ip4.method == "shared") {
+                    client.deactivate_connection_async.begin(ac, null, (o, r) => {
+                        try { client.deactivate_connection_async.end(r); } catch (Error e) {}
+                    });
+                }
+            }
+            delete_connections_by_id(WIRED_SHARE_ID);
+        }
+
+        private void refresh_sharing_state() {
+            bool wifi_ap = false, eth_share = false;
+            if (client != null) {
+                foreach (var ac in client.get_active_connections()) {
+                    var rc = ac.get_connection();
+                    if (rc == null) continue;
+                    var sw = rc.get_setting_wireless();
+                    if (sw != null && sw.mode == "ap") wifi_ap = true;
+                    if (ac.get_connection_type() == "802-3-ethernet") {
+                        var ip4 = rc.get_setting_ip4_config();
+                        if (ip4 != null && ip4.method == "shared") eth_share = true;
+                    }
+                }
+            }
+            if (wifi_ap != wifi_hotspot_active || eth_share != ethernet_sharing_active) {
+                wifi_hotspot_active = wifi_ap;
+                ethernet_sharing_active = eth_share;
+                hotspot_state_changed();
             }
         }
 

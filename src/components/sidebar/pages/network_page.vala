@@ -47,6 +47,86 @@ namespace Singularity {
             });
             add_group(wired_group);
 
+            var hs_settings = new GLib.Settings("dev.sinty.desktop");
+            string init_ssid, init_pw; bool init_wpa3;
+            ensure_hotspot_credentials(hs_settings, out init_ssid, out init_pw, out init_wpa3);
+
+            var hs_group = new PreferencesGroup(_("Hotspot & Sharing"));
+            var hotspot_row = new SwitchRow(_("Wi-Fi Hotspot"),
+                _("Share your connection over Wi-Fi"), network.wifi_hotspot_active);
+            var ssid_row = new EntryRow(_("Hotspot Name"));
+            ssid_row.text = init_ssid;
+            var pw_row = new EntryRow(_("Hotspot Password"));
+            pw_row.text = init_pw;
+            var wpa3_row = new SwitchRow(_("WPA3"),
+                _("More secure, but newer devices only"), init_wpa3);
+            var eth_row = new SwitchRow(_("Share to Wired Device"),
+                _("Give internet to a device connected by cable"), network.ethernet_sharing_active);
+
+            hotspot_row.visible = network.has_wifi;
+            ssid_row.visible = network.has_wifi;
+            pw_row.visible = network.has_wifi;
+            wpa3_row.visible = network.has_wifi;
+            eth_row.visible = network.has_ethernet;
+
+            hs_group.add_row(hotspot_row);
+            hs_group.add_row(ssid_row);
+            hs_group.add_row(pw_row);
+            hs_group.add_row(wpa3_row);
+            hs_group.add_row(eth_row);
+            add_group(hs_group);
+
+            hotspot_row.switch_btn.notify["active"].connect(() => {
+                bool on = hotspot_row.switch_btn.active;
+                if (on == network.wifi_hotspot_active) return;
+                if (!on) { network.stop_wifi_hotspot(); return; }
+
+                string ssid = ssid_row.text.strip();
+                if (ssid == "") ssid = GLib.Environment.get_host_name();
+                string pw = pw_row.text;
+                if (pw.length < 8) { pw = NetworkManagerWrapper.generate_password(); pw_row.text = pw; }
+                bool wpa3 = wpa3_row.switch_btn.active;
+                hs_settings.set_string("hotspot-ssid", ssid);
+                hs_settings.set_string("hotspot-password", pw);
+                hs_settings.set_boolean("hotspot-wpa3", wpa3);
+
+                if (network.hotspot_needs_disconnect()) {
+                    var app = GLib.Application.get_default() as Gtk.Application;
+                    var dlg = new ConfirmDialog(app, _("Start Wi-Fi Hotspot?"),
+                        "network-wireless-hotspot-symbolic",
+                        _("Your current Wi-Fi connection will be disconnected, because the adapter can only join a network or host a hotspot, not both."),
+                        _("Start Hotspot"), ConfirmDialog.ActionStyle.SUGGESTED);
+                    dlg.response.connect((r) => {
+                        if (r == ConfirmDialog.Response.PRIMARY) network.start_wifi_hotspot(ssid, pw, wpa3);
+                        else hotspot_row.switch_btn.active = false;
+                    });
+                    dlg.present();
+                } else {
+                    network.start_wifi_hotspot(ssid, pw, wpa3);
+                }
+            });
+
+            eth_row.switch_btn.notify["active"].connect(() => {
+                bool on = eth_row.switch_btn.active;
+                if (on == network.ethernet_sharing_active) return;
+                if (on) network.start_ethernet_sharing();
+                else network.stop_ethernet_sharing();
+            });
+
+            network.hotspot_state_changed.connect(() => {
+                if (hotspot_row.switch_btn.active != network.wifi_hotspot_active)
+                    hotspot_row.switch_btn.active = network.wifi_hotspot_active;
+                if (eth_row.switch_btn.active != network.ethernet_sharing_active)
+                    eth_row.switch_btn.active = network.ethernet_sharing_active;
+            });
+            network.sharing_action_result.connect((ok, msg) => {
+                if (!ok) {
+                    warning("hotspot/sharing: %s", msg);
+                    hotspot_row.switch_btn.active = network.wifi_hotspot_active;
+                    eth_row.switch_btn.active = network.ethernet_sharing_active;
+                }
+            });
+
             // VPN section
             var vpn_group = new PreferencesGroup(_("VPN"));
             var vpn_rows = new List<Widget>();
@@ -123,6 +203,15 @@ namespace Singularity {
             import_row.add_controller(import_gesture);
             vpn_group.add_row(import_row);
             add_group(vpn_group);
+        }
+
+        public static void ensure_hotspot_credentials(GLib.Settings s,
+                out string ssid, out string password, out bool wpa3) {
+            ssid = s.get_string("hotspot-ssid");
+            if (ssid == "") { ssid = GLib.Environment.get_host_name(); s.set_string("hotspot-ssid", ssid); }
+            password = s.get_string("hotspot-password");
+            if (password.length < 8) { password = NetworkManagerWrapper.generate_password(); s.set_string("hotspot-password", password); }
+            wpa3 = s.get_boolean("hotspot-wpa3");
         }
 
         private void update_networks_list(PreferencesGroup group, ref List<Widget> rows, NetworkManagerWrapper network) {

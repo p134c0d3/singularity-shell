@@ -273,6 +273,36 @@ namespace Singularity {
                             dnd_tile.subtitle = dnd_tile.active ? _("On") : _("Off");
                         });
 
+                        var hotspot_tile = new QuickSettingTile("Hotspot", "network-wireless-hotspot-symbolic", network.wifi_hotspot_active);
+                        hotspot_tile.auto_toggle = false;
+                        hotspot_tile.subtitle = network.wifi_hotspot_active ? _("On") : _("Off");
+                        network.hotspot_state_changed.connect(() => {
+                            hotspot_tile.active = network.wifi_hotspot_active;
+                            hotspot_tile.subtitle = network.wifi_hotspot_active ? _("On") : _("Off");
+                        });
+                        hotspot_tile.clicked.connect(() => {
+                            if (network.wifi_hotspot_active) { network.stop_wifi_hotspot(); return; }
+                            var hs = new GLib.Settings("dev.sinty.desktop");
+                            string ssid, pw; bool wpa3;
+                            NetworkPage.ensure_hotspot_credentials(hs, out ssid, out pw, out wpa3);
+                            if (network.hotspot_needs_disconnect()) {
+                                var app = GLib.Application.get_default() as Gtk.Application;
+                                var dlg = new Singularity.Widgets.ConfirmDialog(app, _("Start Wi-Fi Hotspot?"),
+                                    "network-wireless-hotspot-symbolic",
+                                    _("Your current Wi-Fi connection will be disconnected, because the adapter can only join a network or host a hotspot, not both."),
+                                    _("Start Hotspot"), Singularity.Widgets.ConfirmDialog.ActionStyle.SUGGESTED);
+                                dlg.response.connect((r) => {
+                                    if (r == Singularity.Widgets.ConfirmDialog.Response.PRIMARY)
+                                        network.start_wifi_hotspot(ssid, pw, wpa3);
+                                });
+                                dlg.present();
+                            } else {
+                                network.start_wifi_hotspot(ssid, pw, wpa3);
+                            }
+                        });
+                        var hotspot_nav = make_tile_with_nav(hotspot_tile, "network");
+                        hotspot_nav.visible = network.has_wifi;
+
                         // Row 0: Wi-Fi & Bluetooth (only when the hardware exists)
                         var wifi_nav = make_tile_with_nav(wifi_tile, "network");
                         var bt_nav = make_tile_with_nav(bt_tile, "bluetooth");
@@ -295,12 +325,14 @@ namespace Singularity {
                             grid.attach(make_tile_with_nav(dnd_tile, "notifications"), 0, 4, 1, 1);
                             grid.attach(make_tile_with_nav(vpn_tile, "network"), 1, 4, 1, 1);
                             grid.attach(tiling_wrapper, 0, 5, 1, 1);
+                            grid.attach(hotspot_nav, 1, 5, 1, 1);
                         } else {
                             grid.attach(tiling_wrapper, 1, 2, 1, 1);
                             grid.attach(audio_mute_wrapper, 0, 3, 1, 1);
                             grid.attach(ppm_wrapper, 1, 3, 1, 1);
                             grid.attach(make_tile_with_nav(dnd_tile, "notifications"), 0, 4, 1, 1);
                             grid.attach(make_tile_with_nav(vpn_tile, "network"), 1, 4, 1, 1);
+                            grid.attach(hotspot_nav, 0, 5, 1, 1);
                         }
 
                         content.append(grid);
