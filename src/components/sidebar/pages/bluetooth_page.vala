@@ -9,6 +9,7 @@ namespace Singularity.SidebarPages {
         private PreferencesGroup devices_group;
         private Box devices_box;
         private bool _syncing = false;
+        private uint _refresh_id = 0;
 
         public BluetoothPage(SettingsView view) {
             base(_("Bluetooth"));
@@ -53,6 +54,23 @@ namespace Singularity.SidebarPages {
                 manager.start_discovery.begin();
             } else if (!manager.is_powered && manager.is_discovering) {
                 manager.stop_discovery.begin();
+            }
+            if (manager.is_powered) {
+                if (_refresh_id == 0) {
+                    _refresh_id = Timeout.add_seconds(3, () => {
+                        manager.refresh.begin();
+                        return Source.CONTINUE;
+                    });
+                }
+            } else {
+                stop_refresh();
+            }
+        }
+
+        private void stop_refresh() {
+            if (_refresh_id != 0) {
+                Source.remove(_refresh_id);
+                _refresh_id = 0;
             }
         }
 
@@ -132,6 +150,7 @@ namespace Singularity.SidebarPages {
         }
 
         public override void dispose() {
+            stop_refresh();
             if (manager.is_discovering) {
                 manager.stop_discovery.begin();
             }
