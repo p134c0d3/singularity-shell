@@ -8,6 +8,7 @@ namespace Singularity.SidebarPages {
         private SwitchRow power_row;
         private PreferencesGroup devices_group;
         private Box devices_box;
+        private bool _syncing = false;
 
         public BluetoothPage(SettingsView view) {
             base(_("Bluetooth"));
@@ -28,6 +29,7 @@ namespace Singularity.SidebarPages {
             var group = new PreferencesGroup(_("General"));
             power_row = new SwitchRow(_("Bluetooth"), _("Turn Bluetooth on or off"), false);
             power_row.switch_btn.notify["active"].connect(() => {
+                if (_syncing) return;
                 manager.set_power.begin(power_row.active);
             });
             group.add_row(power_row);
@@ -42,7 +44,9 @@ namespace Singularity.SidebarPages {
 
         private void update_state() {
             if (power_row.active != manager.is_powered) {
+                _syncing = true;
                 power_row.active = manager.is_powered;
+                _syncing = false;
             }
             devices_group.visible = manager.is_powered;
             if (manager.is_powered && !manager.is_discovering) {

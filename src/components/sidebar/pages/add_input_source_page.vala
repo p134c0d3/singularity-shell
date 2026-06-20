@@ -39,80 +39,10 @@ namespace Singularity.SidebarPages {
         }
 
         private void load_sources() {
-            string? path = find_layout_list();
-            if (path != null) {
-                string contents;
-                try {
-                    FileUtils.get_contents(path, out contents);
-                    string section = "";
-                    foreach (unowned string raw in contents.split("\n")) {
-                        string line = raw.chomp();
-                        if (line.has_prefix("!")) {
-                            section = line.substring(1).strip();
-                            continue;
-                        }
-                        if (line.strip() == "")
-                            continue;
-                        if (section == "layout")
-                            add_layout(line);
-                        else if (section == "variant")
-                            add_variant(line);
-                    }
-                } catch (Error e) {
-                    warning("Could not read keyboard layout list: %s", e.message);
-                }
+            foreach (var s in InputSourceUtil.list()) {
+                all_sources.append(new InputSourceInfo(s.id, s.name, s.description));
             }
-            all_sources.sort((a, b) => {
-                return a.name.collate(b.name);
-            });
             populate_list();
-        }
-
-        private string? find_layout_list() {
-            string[] paths = {
-                "/usr/share/X11/xkb/rules/evdev.lst",
-                "/usr/local/share/X11/xkb/rules/evdev.lst"
-            };
-            foreach (unowned string p in paths) {
-                if (FileUtils.test(p, FileTest.EXISTS))
-                    return p;
-            }
-            return null;
-        }
-
-        private int first_blank(string s) {
-            for (int i = 0; i < s.length; i++) {
-                if (s[i] == ' ' || s[i] == '\t')
-                    return i;
-            }
-            return -1;
-        }
-
-        private void add_layout(string line) {
-            string trimmed = line.strip();
-            int sep = first_blank(trimmed);
-            if (sep <= 0)
-                return;
-            string id = trimmed.substring(0, sep);
-            string desc = trimmed.substring(sep).strip();
-            all_sources.append(new InputSourceInfo(id, desc, id));
-        }
-
-        private void add_variant(string line) {
-            string trimmed = line.strip();
-            int sep = first_blank(trimmed);
-            if (sep <= 0)
-                return;
-            string variant = trimmed.substring(0, sep);
-            string rest = trimmed.substring(sep).strip();
-            string layout = variant;
-            string desc = rest;
-            int colon = rest.index_of(":");
-            if (colon > 0) {
-                layout = rest.substring(0, colon).strip();
-                desc = rest.substring(colon + 1).strip();
-            }
-            all_sources.append(new InputSourceInfo(layout + "+" + variant, desc, layout + "+" + variant));
         }
 
         private void populate_list() {

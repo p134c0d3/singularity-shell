@@ -8,7 +8,7 @@ namespace Singularity {
         public AudioManager audio { get { if (_audio == null) _audio = new AudioManager(); return _audio; } }
         public BrightnessManager brightness { get { if (_brightness == null) _brightness = new BrightnessManager(); return _brightness; } }
         public KbdBrightnessManager kbd_brightness { get { if (_kbd_brightness == null) _kbd_brightness = new KbdBrightnessManager(); return _kbd_brightness; } }
-        public NightLightManager night_light { get { if (_night_light == null) _night_light = new NightLightManager(); return _night_light; } }
+        public NightLightManager night_light { get { if (_night_light == null) { _night_light = new NightLightManager(); _night_light.backend = new WaylandGammaBackend(); } return _night_light; } }
         public ShortcutManager shortcuts { get { if (_shortcuts == null) _shortcuts = new ShortcutManager(); return _shortcuts; } }
         public NotificationManager notifications { get { if (_notifications == null) _notifications = new NotificationManager(); return _notifications; } }
         public DateTimeManager datetime { get { if (_datetime == null) _datetime = new DateTimeManager(); return _datetime; } }
@@ -16,7 +16,7 @@ namespace Singularity {
         public BluetoothManager bluetooth { get { if (_bluetooth == null) _bluetooth = new BluetoothManager(); return _bluetooth; } }
         public PowerProfilesManager power_profiles { get { if (_power_profiles == null) _power_profiles = new PowerProfilesManager(); return _power_profiles; } }
         public ResourceMonitor resources { get { if (_resources == null) _resources = new ResourceMonitor(); return _resources; } }
-        public CallMonitor call_monitor { get { if (_call_monitor == null) _call_monitor = new CallMonitor(); return _call_monitor; } }
+        public CallMonitor call_monitor { get { if (_call_monitor == null) _call_monitor = new CallMonitor(audio); return _call_monitor; } }
 
         private PowerManager? _power;
         private NetworkManagerWrapper? _network;

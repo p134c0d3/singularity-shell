@@ -188,29 +188,15 @@ namespace Singularity.SidebarPages {
         }
 
         private string get_distro_icon_name() {
-            string? logo_icon = null;
-            string? distro_id = null;
-            try {
-                string content;
-                FileUtils.get_contents("/etc/os-release", out content);
-                foreach (string line in content.split("\n")) {
-                    if (line.has_prefix("LOGO=")) {
-                        logo_icon = line.substring(5).replace("\"", "").strip();
-                    } else if (line.has_prefix("ID=")) {
-                        distro_id = line.substring(3).replace("\"", "").strip();
-                    }
-                }
-            } catch (Error e) {}
-            // Prefer the explicit LOGO field from os-release.
+            string? logo_icon = HardwareInfo.os_release("LOGO");
+            string? distro_id = HardwareInfo.os_release("ID");
             var icon_theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default());
             if (logo_icon != null && logo_icon != "" && icon_theme.has_icon(logo_icon)) {
                 return logo_icon;
             }
-            // Fall back to the distro ID as an icon name.
             if (distro_id != null && distro_id != "" && icon_theme.has_icon(distro_id)) {
                 return distro_id;
             }
-            // Last resort: Singularity emblem or generic computer icon.
             if (icon_theme.has_icon("emblem-singularity")) {
                 return "emblem-singularity";
             }
@@ -218,102 +204,35 @@ namespace Singularity.SidebarPages {
         }
 
         private string get_os_name() {
-            try {
-                string content;
-                FileUtils.get_contents("/etc/os-release", out content);
-                foreach (string line in content.split("\n")) {
-                    if (line.has_prefix("PRETTY_NAME=")) {
-                        return line.split("=")[1].replace("\"", "");
-                    }
-                }
-            } catch (Error e) {}
-            return "Linux";
+            return HardwareInfo.os_name();
         }
 
         private string get_hardware_model() {
-            try {
-                string content;
-                if (FileUtils.get_contents("/sys/devices/virtual/dmi/id/product_name", out content)) {
-                    return content.strip();
-                }
-            } catch (Error e) {}
-            return "Unknown Model";
+            return HardwareInfo.hardware_model();
         }
 
         private string get_processor_info() {
-            try {
-                string content;
-                FileUtils.get_contents("/proc/cpuinfo", out content);
-                foreach (string line in content.split("\n")) {
-                    if (line.has_prefix("model name")) {
-                        string model = line.split(":")[1].strip();
-                        return model;
-                    }
-                }
-            } catch (Error e) {}
-            return "Unknown Processor";
+            return HardwareInfo.processor();
         }
 
         private string get_memory_info() {
-            try {
-                string content;
-                FileUtils.get_contents("/proc/meminfo", out content);
-                foreach (string line in content.split("\n")) {
-                    if (line.has_prefix("MemTotal:")) {
-                        string val = line.split(":")[1].strip().split(" ")[0]; // kB
-                        int64 kb = int64.parse(val);
-                        return "%.1f GiB".printf(kb / 1024.0 / 1024.0);
-                    }
-                }
-            } catch (Error e) {}
-            return "Unknown Memory";
+            return HardwareInfo.memory();
         }
 
         private string get_disk_info() {
-            try {
-                var file = File.new_for_path("/");
-                var info = file.query_filesystem_info(FileAttribute.FILESYSTEM_SIZE, null);
-                uint64 size = info.get_attribute_uint64(FileAttribute.FILESYSTEM_SIZE);
-                return "%.1f GB".printf(size / 1000.0 / 1000.0 / 1000.0);
-            } catch (Error e) {}
-            return "Unknown";
+            return HardwareInfo.disk();
         }
 
         private string get_kernel_version() {
-            try {
-                string content;
-                FileUtils.get_contents("/proc/version", out content);
-                return content.split(" ")[2];
-            } catch (Error e) {}
-            return "Unknown";
+            return HardwareInfo.kernel();
         }
 
         private string get_firmware_version() {
-            try {
-                string content;
-                if (FileUtils.get_contents("/sys/class/dmi/id/bios_version", out content)) {
-                    return content.strip();
-                }
-            } catch (Error e) {}
-            return "Unknown";
+            return HardwareInfo.firmware();
         }
 
         private string get_graphics_info() {
-            // Try to find a GPU vendor/device
-            // This is very rudimentary.
-            try {
-                // Check for Intel/AMD/Nvidia in lspci output if available?
-                // Or check /sys/class/drm/card0/device/vendor
-                string vendor_id;
-                if (FileUtils.get_contents("/sys/class/drm/card0/device/vendor", out vendor_id)) {
-                    vendor_id = vendor_id.strip();
-                    if (vendor_id == "0x8086") return "Intel Graphics";
-                    if (vendor_id == "0x10de") return "NVIDIA Graphics";
-                    if (vendor_id == "0x1002") return "AMD Graphics";
-                    return "Unknown GPU (" + vendor_id + ")";
-                }
-            } catch (Error e) {}
-            return "Unknown Graphics";
+            return HardwareInfo.graphics();
         }
     }
 }

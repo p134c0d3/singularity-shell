@@ -69,26 +69,15 @@ namespace Singularity {
         }
 
         private void handle_edge_motion(int w, double x, int left_corner, int right_corner) {
-            bool moving_left  = _last_x >= 0 && x < _last_x - 0.5;
-            bool moving_right = _last_x >= 0 && x > _last_x + 0.5;
+            var hit = HotCornerLogic.evaluate(w, x, _last_x, CORNER_SIZE, EDGE_TRIGGER,
+                _actions[left_corner] != "none", _actions[right_corner] != "none",
+                left_corner, right_corner);
             _last_x = x;
 
-            string? hint_action = null;
-            int hint_corner = -1;
-            string? arm_action = null;
-            int arm_corner = -1;
-
-            if (x < CORNER_SIZE && _actions[left_corner] != "none") {
-                hint_action = _actions[left_corner]; hint_corner = left_corner;
-                if (x <= EDGE_TRIGGER && (moving_left || x <= 1)) {
-                    arm_action = hint_action; arm_corner = left_corner;
-                }
-            } else if (w > 0 && x > w - CORNER_SIZE && _actions[right_corner] != "none") {
-                hint_action = _actions[right_corner]; hint_corner = right_corner;
-                if (x >= w - EDGE_TRIGGER && (moving_right || x >= w - 1)) {
-                    arm_action = hint_action; arm_corner = right_corner;
-                }
-            }
+            int hint_corner = hit.hint_corner;
+            string? hint_action = hint_corner >= 0 ? _actions[hint_corner] : null;
+            int arm_corner = hit.arm ? hit.hint_corner : -1;
+            string? arm_action = hit.arm ? hint_action : null;
 
             // Keep an armed trigger alive while the pointer lingers near the
             // corner, so a tiny inward drift before the delay elapses doesn't

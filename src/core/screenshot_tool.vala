@@ -425,12 +425,12 @@ namespace Singularity {
 
             int x, y, w, h;
             switch (win.snap_type) {
-                case TilingManager.SNAP_LEFT:         x=ux;       y=uy;       w=uw/2;  h=uh;   break;
-                case TilingManager.SNAP_RIGHT:        x=ux+uw/2;  y=uy;       w=uw/2;  h=uh;   break;
-                case TilingManager.SNAP_TOP_LEFT:     x=ux;       y=uy;       w=uw/2;  h=uh/2; break;
-                case TilingManager.SNAP_TOP_RIGHT:    x=ux+uw/2;  y=uy;       w=uw/2;  h=uh/2; break;
-                case TilingManager.SNAP_BOTTOM_LEFT:  x=ux;       y=uy+uh/2;  w=uw/2;  h=uh/2; break;
-                case TilingManager.SNAP_BOTTOM_RIGHT: x=ux+uw/2;  y=uy+uh/2;  w=uw/2;  h=uh/2; break;
+                case TilingLayout.SNAP_LEFT:         x=ux;       y=uy;       w=uw/2;  h=uh;   break;
+                case TilingLayout.SNAP_RIGHT:        x=ux+uw/2;  y=uy;       w=uw/2;  h=uh;   break;
+                case TilingLayout.SNAP_TOP_LEFT:     x=ux;       y=uy;       w=uw/2;  h=uh/2; break;
+                case TilingLayout.SNAP_TOP_RIGHT:    x=ux+uw/2;  y=uy;       w=uw/2;  h=uh/2; break;
+                case TilingLayout.SNAP_BOTTOM_LEFT:  x=ux;       y=uy+uh/2;  w=uw/2;  h=uh/2; break;
+                case TilingLayout.SNAP_BOTTOM_RIGHT: x=ux+uw/2;  y=uy+uh/2;  w=uw/2;  h=uh/2; break;
                 default: x=ux; y=uy; w=uw; h=uh; break;
             }
 

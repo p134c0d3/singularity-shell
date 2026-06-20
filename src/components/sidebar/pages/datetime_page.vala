@@ -103,25 +103,7 @@ namespace Singularity.SidebarPages {
             set_time_btn.clicked.connect(() => show_time_picker(set_time_btn));
             date_time_row.add_suffix(set_time_btn);
             group.add_row(date_time_row);
-            string[] timezones = {};
-            try {
-                var file = File.new_for_path("/usr/share/zoneinfo/zone.tab");
-                if (file.query_exists()) {
-                    var list = new List<string>();
-                    walk_dir(File.new_for_path("/usr/share/zoneinfo"), "", list);
-                    list.sort(string.collate);
-                    string[] arr = new string[list.length()];
-                    int i = 0;
-                    foreach (var tz in list) {
-                        arr[i++] = tz;
-                    }
-                    timezones = arr;
-                } else {
-                    timezones = {"UTC", "Europe/Rome", "America/New_York", "Asia/Tokyo"};
-                }
-            } catch (Error e) {
-                timezones = {"UTC"};
-            }
+            string[] timezones = TimezoneUtil.list();
             timezone_row = new SelectionRow(_("Time Zone"), timezones, manager.timezone);
             timezone_row.selected.connect((tz) => {
                 manager.update_timezone(tz);
@@ -134,22 +116,6 @@ namespace Singularity.SidebarPages {
             });
             group.add_row(format_row);
             add_group(group);
-        }
-
-        private void walk_dir(File dir, string prefix, List<string> list) {
-            try {
-                var enumerator = dir.enumerate_children(FileAttribute.STANDARD_NAME + "," + FileAttribute.STANDARD_TYPE, 0);
-                FileInfo info;
-                while ((info = enumerator.next_file()) != null) {
-                    string name = info.get_name();
-                    if (name == "." || name == ".." || name == "posix" || name == "right" || name == "Etc" || name == "SystemV") continue;
-                    if (info.get_file_type() == FileType.DIRECTORY) {
-                        walk_dir(dir.get_child(name), prefix + name + "/", list);
-                    } else {
-                        list.append(prefix + name);
-                    }
-                }
-            } catch (Error e) {}
         }
 
         private void update_ui() {

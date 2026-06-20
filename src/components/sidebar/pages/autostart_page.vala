@@ -4,7 +4,7 @@ using Singularity.Widgets;
 namespace Singularity.SidebarPages {
 
     public class AutostartPage : SettingsPage {
-        private string autostart_dir;
+        private AutostartManager autostart;
         private PreferencesGroup entries_group;
         private SearchableExpanderRow app_row;
 
@@ -12,7 +12,7 @@ namespace Singularity.SidebarPages {
             base(_("Autostart"));
             back_clicked.connect(() => view.go_home());
 
-            autostart_dir = Path.build_filename(Environment.get_user_config_dir(), "autostart");
+            autostart = new AutostartManager();
 
             var add_grp = new PreferencesGroup(_("Autostart Apps"),
                 _("Programs added here start automatically when you log in."));
@@ -36,7 +36,7 @@ namespace Singularity.SidebarPages {
             run_btn.clicked.connect(() => {
                 string cmd = cmd_row.text.strip();
                 if (cmd == "") return;
-                add_command_entry(cmd);
+                autostart.add_command(cmd);
                 cmd_row.text = "";
                 refresh_entries();
             });
@@ -53,7 +53,7 @@ namespace Singularity.SidebarPages {
 
         private void refresh_entries() {
             entries_group.clear();
-            var entries = read_entries();
+            var entries = autostart.entries();
             if (entries.size == 0) {
                 var empty = new ActionRow(_("No startup applications"),
                     _("Add an app or command above"), null);
@@ -83,94 +83,12 @@ namespace Singularity.SidebarPages {
                 remove_btn.tooltip_text = _("Remove");
                 string entry_path = path;
                 remove_btn.clicked.connect(() => {
-                    remove_entry(entry_path);
+                    autostart.remove(entry_path);
                     refresh_entries();
                 });
                 row.add_suffix(remove_btn);
                 entries_group.add_row(row);
             }
-        }
-
-        private Gee.List<string> read_entries() {
-            var list = new Gee.ArrayList<string>();
-            var dir = File.new_for_path(autostart_dir);
-            if (!dir.query_exists()) return list;
-            try {
-                var en = dir.enumerate_children("standard::name", FileQueryInfoFlags.NONE);
-                FileInfo? fi;
-                while ((fi = en.next_file()) != null) {
-                    string n = fi.get_name();
-                    if (n.has_suffix(".desktop"))
-                        list.add(Path.build_filename(autostart_dir, n));
-                }
-            } catch (Error e) {
-                warning("Autostart: failed to read %s: %s", autostart_dir, e.message);
-            }
-            list.sort((a, b) => GLib.strcmp(Path.get_basename(a), Path.get_basename(b)));
-            return list;
-        }
-
-        private void ensure_dir() {
-            var dir = File.new_for_path(autostart_dir);
-            if (!dir.query_exists()) {
-                try { dir.make_directory_with_parents(); }
-                catch (Error e) { warning("Autostart: cannot create %s: %s", autostart_dir, e.message); }
-            }
-        }
-
-        private bool already_present(string desktop_id) {
-            return File.new_for_path(Path.build_filename(autostart_dir, desktop_id)).query_exists();
-        }
-
-        private void add_app_entry(DesktopAppInfo info) {
-            ensure_dir();
-            string id = info.get_id() ?? (info.get_display_name() + ".desktop");
-            string target = Path.build_filename(autostart_dir, id);
-            var kf = new KeyFile();
-            string? src = info.get_filename();
-            try {
-                if (src != null && kf.load_from_file(src, KeyFileFlags.KEEP_COMMENTS | KeyFileFlags.KEEP_TRANSLATIONS)) {
-                    // loaded the original entry
-                } else {
-                    build_minimal_keyfile(kf, info.get_display_name(),
-                        info.get_commandline() ?? "", info.get_icon());
-                }
-                kf.set_boolean("Desktop Entry", "X-GNOME-Autostart-enabled", true);
-                FileUtils.set_contents(target, kf.to_data());
-            } catch (Error e) {
-                warning("Autostart: failed to write %s: %s", target, e.message);
-            }
-        }
-
-        private void add_command_entry(string command) {
-            ensure_dir();
-            string sanitized = command.split(" ")[0];
-            sanitized = Path.get_basename(sanitized).replace("/", "_");
-            if (sanitized == "") sanitized = "command";
-            string target = Path.build_filename(autostart_dir, "custom-" + sanitized + ".desktop");
-            var kf = new KeyFile();
-            build_minimal_keyfile(kf, sanitized, command, null);
-            try {
-                kf.set_boolean("Desktop Entry", "X-GNOME-Autostart-enabled", true);
-                FileUtils.set_contents(target, kf.to_data());
-            } catch (Error e) {
-                warning("Autostart: failed to write %s: %s", target, e.message);
-            }
-        }
-
-        private void build_minimal_keyfile(KeyFile kf, string name, string exec, GLib.Icon? icon) {
-            kf.set_string("Desktop Entry", "Type", "Application");
-            kf.set_string("Desktop Entry", "Name", name);
-            kf.set_string("Desktop Entry", "Exec", exec);
-            kf.set_boolean("Desktop Entry", "Terminal", false);
-            if (icon != null) kf.set_string("Desktop Entry", "Icon", icon.to_string());
-        }
-
-        private void remove_entry(string path) {
-            // Only ever delete files inside the user autostart directory.
-            if (!path.has_prefix(autostart_dir)) return;
-            try { File.new_for_path(path).delete(); }
-            catch (Error e) { warning("Autostart: failed to remove %s: %s", path, e.message); }
         }
 
         private void populate_app_list(string query) {
@@ -186,7 +104,7 @@ namespace Singularity.SidebarPages {
                 var dai = ai as DesktopAppInfo;
                 if (dai == null || !dai.should_show()) continue;
                 string id = dai.get_id() ?? "";
-                if (id != "" && already_present(id)) continue;
+                if (id != "" && autostart.contains(id)) continue;
                 apps.add(dai);
             }
             apps.sort((a, b) => GLib.strcmp(a.get_display_name().down(), b.get_display_name().down()));
@@ -204,7 +122,7 @@ namespace Singularity.SidebarPages {
                 }
                 var picked = dai;
                 item.activated.connect(() => {
-                    add_app_entry(picked);
+                    autostart.add_app(picked);
                     app_row.expanded = false;
                     app_row.search_entry.text = "";
                     refresh_entries();

@@ -7,16 +7,6 @@ namespace Singularity {
         private AppSystem app_system;
         private GLib.Settings settings;
         private bool enabled = true;
-        public static const uint SNAP_NONE = 0;
-        public static const uint SNAP_LEFT = 1;
-        public static const uint SNAP_RIGHT = 2;
-        public static const uint SNAP_TOP = 3;
-        public static const uint SNAP_BOTTOM = 4;
-        public static const uint SNAP_TOP_LEFT = 5;
-        public static const uint SNAP_TOP_RIGHT = 6;
-        public static const uint SNAP_BOTTOM_LEFT = 7;
-        public static const uint SNAP_BOTTOM_RIGHT = 8;
-        public static const uint SNAP_MAXIMIZE = 9;
 
         public TilingManager(AppSystem app_system) {
             this.app_system = app_system;
@@ -79,30 +69,10 @@ namespace Singularity {
             }
             int count = (int)tileable.length();
             if (count == 0) return;
-            if (count == 1) {
-                snap(tileable.nth_data(0), SNAP_MAXIMIZE);
-            }
-            else if (count == 2) {
-                snap(tileable.nth_data(0), SNAP_LEFT);
-                snap(tileable.nth_data(1), SNAP_RIGHT);
-            }
-            else if (count == 3) {
-                snap(tileable.nth_data(0), SNAP_LEFT);
-                snap(tileable.nth_data(1), SNAP_TOP_RIGHT);
-                snap(tileable.nth_data(2), SNAP_BOTTOM_RIGHT);
-            }
-            else {
-                int i = 0;
-                foreach (var win in tileable) {
-                    uint s = SNAP_NONE;
-                    if (i == 0) s = SNAP_TOP_LEFT;
-                    else if (i == 1) s = SNAP_TOP_RIGHT;
-                    else if (i == 2) s = SNAP_BOTTOM_LEFT;
-                    else if (i == 3) s = SNAP_BOTTOM_RIGHT;
-                    else s = SNAP_MAXIMIZE;
-                    snap(win, s);
-                    i++;
-                }
+            int i = 0;
+            foreach (var win in tileable) {
+                snap(win, TilingLayout.snap_for(count, i));
+                i++;
             }
         }
     }

@@ -606,21 +606,21 @@ namespace Singularity {
             var maximize_action = new SimpleAction("maximize", null);
             maximize_action.activate.connect(() => {
                 if (menu_win != null)
-                    Singularity.wayland_snap_view(menu_win, TilingManager.SNAP_MAXIMIZE);
+                    Singularity.wayland_snap_view(menu_win, TilingLayout.SNAP_MAXIMIZE);
             });
             group.add_action(maximize_action);
 
             var snap_left_action = new SimpleAction("snap-left", null);
             snap_left_action.activate.connect(() => {
                 if (menu_win != null)
-                    Singularity.wayland_snap_view(menu_win, TilingManager.SNAP_LEFT);
+                    Singularity.wayland_snap_view(menu_win, TilingLayout.SNAP_LEFT);
             });
             group.add_action(snap_left_action);
 
             var snap_right_action = new SimpleAction("snap-right", null);
             snap_right_action.activate.connect(() => {
                 if (menu_win != null)
-                    Singularity.wayland_snap_view(menu_win, TilingManager.SNAP_RIGHT);
+                    Singularity.wayland_snap_view(menu_win, TilingLayout.SNAP_RIGHT);
             });
             group.add_action(snap_right_action);
 

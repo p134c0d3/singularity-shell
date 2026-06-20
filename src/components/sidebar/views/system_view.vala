@@ -132,7 +132,7 @@ namespace Singularity {
                             SystemView.update_bt_tile(bt_tile, bluetooth);
                         });
                         bt_tile.clicked.connect(() => {
-                            bluetooth.set_power.begin(!bt_tile.active);
+                            bluetooth.set_power.begin(!bluetooth.is_powered);
                         });
 
                         // Dark Mode Tile

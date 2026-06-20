@@ -492,10 +492,10 @@ namespace Singularity {
                     case "screenshot_tool":     screenshot_tool_action(); break;
                     case "screenshot_region":   screenshot_region_action(); break;
                     case "screenshot_window":   screenshot_window_action(); break;
-                    case "snap_left":  snap_focused(TilingManager.SNAP_LEFT); break;
-                    case "snap_right": snap_focused(TilingManager.SNAP_RIGHT); break;
-                    case "snap_up":    snap_focused(TilingManager.SNAP_TOP); break;
-                    case "snap_down":  snap_focused(TilingManager.SNAP_BOTTOM); break;
+                    case "snap_left":  snap_focused(TilingLayout.SNAP_LEFT); break;
+                    case "snap_right": snap_focused(TilingLayout.SNAP_RIGHT); break;
+                    case "snap_up":    snap_focused(TilingLayout.SNAP_TOP); break;
+                    case "snap_down":  snap_focused(TilingLayout.SNAP_BOTTOM); break;
                     default: warning("Unknown action: %s", action_name); break;
                 }
             } catch (Error e) {
@@ -504,16 +504,16 @@ namespace Singularity {
         }
 
         private void* _last_snap_handle = null;
-        private uint _last_snap = TilingManager.SNAP_NONE;
+        private uint _last_snap = TilingLayout.SNAP_NONE;
 
         private void snap_focused(uint snap) {
             void* handle = AppSystem.get_default().get_focused_window_handle();
             if (handle == null) return;
             uint effective = snap;
-            if (snap == TilingManager.SNAP_TOP
+            if (snap == TilingLayout.SNAP_TOP
                     && handle == _last_snap_handle
-                    && _last_snap == TilingManager.SNAP_TOP) {
-                effective = TilingManager.SNAP_MAXIMIZE;
+                    && _last_snap == TilingLayout.SNAP_TOP) {
+                effective = TilingLayout.SNAP_MAXIMIZE;
             }
             Singularity.wayland_snap_view(handle, effective);
             _last_snap_handle = handle;
@@ -736,12 +736,12 @@ namespace Singularity {
             // Map snap type to (x, y, w, h) within usable area
             int x, y, w, h;
             switch (win.snap_type) {
-                case TilingManager.SNAP_LEFT:         x=ux;       y=uy;       w=uw/2;  h=uh;   break;
-                case TilingManager.SNAP_RIGHT:        x=ux+uw/2;  y=uy;       w=uw/2;  h=uh;   break;
-                case TilingManager.SNAP_TOP_LEFT:     x=ux;       y=uy;       w=uw/2;  h=uh/2; break;
-                case TilingManager.SNAP_TOP_RIGHT:    x=ux+uw/2;  y=uy;       w=uw/2;  h=uh/2; break;
-                case TilingManager.SNAP_BOTTOM_LEFT:  x=ux;       y=uy+uh/2;  w=uw/2;  h=uh/2; break;
-                case TilingManager.SNAP_BOTTOM_RIGHT: x=ux+uw/2;  y=uy+uh/2;  w=uw/2;  h=uh/2; break;
+                case TilingLayout.SNAP_LEFT:         x=ux;       y=uy;       w=uw/2;  h=uh;   break;
+                case TilingLayout.SNAP_RIGHT:        x=ux+uw/2;  y=uy;       w=uw/2;  h=uh;   break;
+                case TilingLayout.SNAP_TOP_LEFT:     x=ux;       y=uy;       w=uw/2;  h=uh/2; break;
+                case TilingLayout.SNAP_TOP_RIGHT:    x=ux+uw/2;  y=uy;       w=uw/2;  h=uh/2; break;
+                case TilingLayout.SNAP_BOTTOM_LEFT:  x=ux;       y=uy+uh/2;  w=uw/2;  h=uh/2; break;
+                case TilingLayout.SNAP_BOTTOM_RIGHT: x=ux+uw/2;  y=uy+uh/2;  w=uw/2;  h=uh/2; break;
                 default: /* SNAP_MAXIMIZE and unknown */ x=ux; y=uy; w=uw; h=uh; break;
             }
 

@@ -737,9 +737,9 @@ namespace Singularity {
                     for (int x = 0; x < pixbuf.get_width(); x++) {
                         int idx = y * rs + x * ch;
                         if (idx + 2 >= n) continue;
-                        total += 0.2126 * data[idx] / 255.0
-                               + 0.7152 * data[idx + 1] / 255.0
-                               + 0.0722 * data[idx + 2] / 255.0;
+                        total += ColorUtil.srgb_luminance(data[idx] / 255.0,
+                                                          data[idx + 1] / 255.0,
+                                                          data[idx + 2] / 255.0);
                         count++;
                     }
                 }

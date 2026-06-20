@@ -149,9 +149,7 @@ namespace Singularity {
         // Single grid lattice shared by drag-drop and auto-placement so the
         // two never land on mismatched baselines (issue #41).
         private int snap_axis(double v, int origin) {
-            int cell = (int)Math.lround((v - origin) / (double)GRID_SIZE);
-            if (cell < 0) cell = 0;
-            return cell * GRID_SIZE + origin;
+            return GridLayout.snap(v, origin, GRID_SIZE);
         }
 
         private int bottom_limit() {
@@ -170,19 +168,9 @@ namespace Singularity {
             return taken;
         }
 
-        // Walk down the column from (sx,sy), wrapping to the next column when
-        // it runs off the bottom, until a free cell is found.
         private void find_free_cell(ref int sx, ref int sy, string? exclude) {
-            int limit = bottom_limit();
-            int guard = 0;
-            while (cell_taken(sx, sy, exclude) && guard < 4096) {
-                sy += GRID_SIZE;
-                if (sy > limit) {
-                    sy = ORIGIN_Y;
-                    sx += GRID_SIZE;
-                }
-                guard++;
-            }
+            GridLayout.find_free_cell(ref sx, ref sy, ORIGIN_Y, GRID_SIZE, bottom_limit(),
+                (x, y) => cell_taken(x, y, exclude));
         }
 
         private void shift_icon_at_position(int x, int y) {

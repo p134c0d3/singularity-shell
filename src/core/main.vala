@@ -241,7 +241,13 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
         Idle.add(() => {
             update_desktop_icons();
             preview_manager = new Singularity.PreviewManager(this);
-            Singularity.SystemMonitor.get_default().resources.start();
+            var _resources = Singularity.SystemMonitor.get_default().resources;
+            _resources.alert.connect((summary, body, icon) => {
+                var mgr = Singularity.SystemMonitor.get_default().notifications;
+                uint nid = mgr.next_id++;
+                mgr.new_notification(nid, "Singularity", summary, body, icon, new string[0]);
+            });
+            _resources.start();
             // Pre-warm widget modules (dlopen) at login so the first overview
             // open isn't stalled loading them.
             Singularity.OverviewWidgetRegistry.get_default().load_manifests();

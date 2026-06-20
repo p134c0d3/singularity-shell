@@ -243,6 +243,9 @@ vk_proto_h = custom_target(
 libsingularity_dep = dependency('singularity-1.0',
   fallback: ['libsingularity', 'libsingularity_dep']
 )
+system_dep = dependency('singularity-system-1.0',
+  fallback: ['libsingularity', 'libsingularity_system_dep']
+)
 loginui_dep = dependency('singularity-loginui',
   fallback: ['singularity-loginui', 'loginui_dep']
 )
@@ -254,24 +257,15 @@ endif
 singularity_core_sources = files(
     'src/components/panel/panel.vala',
     'src/core/dbus_menu_adapter.vala',
-    'src/core/app_menu_registrar.vala',
     'src/core/atspi_menu_provider.vala',
     'src/core/gtk_actions_menu_provider.vala',
     'src/core/app_system.vala',
     'src/core/compositor_backend.vala',
-    'src/core/gamemode_manager.vala',
     'src/core/system_monitor.vala',
-    'src/core/shared_clock.vala',
     'src/core/preview_cache.vala',
-    'src/core/power_manager.vala',
-    'src/core/power_profiles_manager.vala',
     'src/core/extreme_mode_manager.vala',
     'src/core/wallpaper_manager.vala',
-    'src/core/nm_wrapper.vala',
-    'src/core/audio_manager.vala',
-    'src/core/brightness_manager.vala',
-    'src/core/kbd_brightness_manager.vala',
-    'src/core/night_light_manager.vala',
+    'src/core/wayland_gamma_backend.vala',
     'src/core/shortcut_manager.vala',
     'src/core/screenshot_portal.vala',
     'src/core/screenshot_tool.vala',
@@ -290,7 +284,6 @@ singularity_core_sources = files(
     'src/components/notifications/notification_display.vala',
     'src/components/notifications/notification_center.vala',
     'src/core/notification_manager.vala',
-    'src/core/resource_monitor.vala',
     'src/components/sidebar/views/system_view.vala',
     'src/components/sidebar/views/power_confirm_dialog.vala',
     'src/components/sidebar/views/settings_view.vala',
@@ -311,12 +304,6 @@ singularity_core_sources = files(
     'src/components/sidebar/pages/plugins_page.vala',
     'src/components/sidebar/pages/plugin_details_page.vala',
     'src/components/sidebar/pages/performance_page.vala',
-    'src/core/users/accounts_service.vala',
-    'src/core/datetime_manager.vala',
-    'src/core/locale_manager.vala',
-    'src/core/bluetooth_manager.vala',
-    'src/core/call_monitor.vala',
-    'src/core/now_playing_cache.vala',
     'src/core/display_manager.vala',
     'src/core/hot_corner_manager.vala',
     'src/core/monitor_osd.vala',
@@ -341,7 +328,6 @@ singularity_core_sources = files(
     'src/components/calendar/calendar_view.vala',
     'src/core/calendar/local_provider.vala',
     'src/core/calendar/goa_provider.vala',
-    'src/core/session_manager.vala',
     'src/core/session_recovery.vala',
     'src/components/sidebar/views/session_restore_dialog.vala',
     'src/components/overview/overview.vala',
@@ -372,7 +358,7 @@ executable('singularity-desktop',
   sources: ['src/core/main.vala'] + singularity_core_sources + [
     wl_proto_c, wl_proto_h, ws_proto_c, ws_proto_h, sp_proto_c, sp_proto_h, om_proto_c, om_proto_h, st_proto_c, st_proto_h, gc_proto_c, gc_proto_h, sb_proto_c, sb_proto_h, vk_proto_c, vk_proto_h
   ],
-  dependencies: dependencies + [libsingularity_dep, gee_dep, json_dep, cc.find_library('m'), cc.find_library('crypt'), dependency('xcb')],
+  dependencies: dependencies + [libsingularity_dep, system_dep, gee_dep, json_dep, cc.find_library('m'), cc.find_library('crypt'), dependency('xcb')],
   include_directories: [
     include_directories('src'),
     include_directories('src/core'),
