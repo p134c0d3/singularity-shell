@@ -248,6 +248,14 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
                 mgr.new_notification(nid, "Singularity", summary, body, icon, new string[0]);
             });
             _resources.start();
+            GLib.Timeout.add(200, () => {
+                var _rt = GLib.Environment.get_variable("XDG_RUNTIME_DIR");
+                if (_rt != null && _rt != "") {
+                    try { GLib.FileUtils.set_contents(_rt + "/singularity-shell-ready", ""); }
+                    catch (GLib.Error e) {}
+                }
+                return GLib.Source.REMOVE;
+            });
             // Pre-warm widget modules (dlopen) at login so the first overview
             // open isn't stalled loading them.
             Singularity.OverviewWidgetRegistry.get_default().load_manifests();
