@@ -18,7 +18,7 @@ namespace Singularity {
     [CCode (has_target = false)]
     public delegate void WorkspaceStateCallback(void* handle, uint32 state, void* data);
 
-    [CCode (cname = "singularity_wayland_init")]
+    [CCode (cname = "singularity_wayland_init", cheader_filename = "wayland_integration.h")]
     public void wayland_init(
         AppOpenedCallback opened_cb, 
         AppClosedCallback closed_cb, 
@@ -31,89 +31,89 @@ namespace Singularity {
         void* user_data
     );
 
-    [CCode (cname = "singularity_wayland_activate_window")]
+    [CCode (cname = "singularity_wayland_activate_window", cheader_filename = "wayland_integration.h")]
     public void wayland_activate_window(void* handle);
 
-    [CCode (cname = "singularity_wayland_activate_workspace")]
+    [CCode (cname = "singularity_wayland_activate_workspace", cheader_filename = "wayland_integration.h")]
     public void wayland_activate_workspace(void* handle);
 
-    [CCode (cname = "singularity_wayland_assign_toplevel")]
+    [CCode (cname = "singularity_wayland_assign_toplevel", cheader_filename = "wayland_integration.h")]
     public void wayland_assign_toplevel(void* workspace_handle, void* toplevel_handle);
     
-    [CCode (cname = "singularity_wayland_create_workspace")]
+    [CCode (cname = "singularity_wayland_create_workspace", cheader_filename = "wayland_integration.h")]
     public void wayland_create_workspace(string name);
     
-    [CCode (cname = "singularity_wayland_remove_workspace")]
+    [CCode (cname = "singularity_wayland_remove_workspace", cheader_filename = "wayland_integration.h")]
     public void wayland_remove_workspace(void* handle);
 
-    [CCode (cname = "singularity_wayland_minimize_window")]
+    [CCode (cname = "singularity_wayland_minimize_window", cheader_filename = "wayland_integration.h")]
     public void minimize_window(void* handle);
 
-    [CCode (cname = "singularity_wayland_unminimize_window")]
+    [CCode (cname = "singularity_wayland_unminimize_window", cheader_filename = "wayland_integration.h")]
     public void unminimize_window(void* handle);
 
-    [CCode (cname = "singularity_wayland_close_window")]
+    [CCode (cname = "singularity_wayland_close_window", cheader_filename = "wayland_integration.h")]
     public void close_window(void* handle);
 
     [CCode (cname = "PreviewCallback")]
     public delegate void PreviewCallback(int width, int height, int stride, void* data);
 
-    [CCode (cname = "singularity_wayland_capture_preview")]
+    [CCode (cname = "singularity_wayland_capture_preview", cheader_filename = "wayland_integration.h")]
     public void wayland_capture_preview(void* toplevel_handle, owned PreviewCallback callback);
 
-    [CCode (cname = "singularity_wayland_capture_preview_cancellable")]
+    [CCode (cname = "singularity_wayland_capture_preview_cancellable", cheader_filename = "wayland_integration.h")]
     public void* wayland_capture_preview_cancellable(void* toplevel_handle, owned PreviewCallback callback);
 
-    [CCode (cname = "singularity_wayland_cancel_capture")]
+    [CCode (cname = "singularity_wayland_cancel_capture", cheader_filename = "wayland_integration.h")]
     public void wayland_cancel_capture(void* token);
 
-    [CCode (cname = "singularity_wayland_preview_pool_trim")]
+    [CCode (cname = "singularity_wayland_preview_pool_trim", cheader_filename = "wayland_integration.h")]
     public void wayland_preview_pool_trim();
 
-    [CCode (cname = "singularity_wayland_begin_output_config")]
+    [CCode (cname = "singularity_wayland_begin_output_config", cheader_filename = "wayland_integration.h")]
     public void wayland_begin_output_config(uint32 serial);
 
-    [CCode (cname = "singularity_wayland_config_head")]
+    [CCode (cname = "singularity_wayland_config_head", cheader_filename = "wayland_integration.h")]
     public void wayland_config_head(void* head_handle, int enabled, int x, int y, double scale, int transform, int mode_width, int mode_height, int mode_refresh);
 
-    [CCode (cname = "singularity_wayland_config_head_v2")]
+    [CCode (cname = "singularity_wayland_config_head_v2", cheader_filename = "wayland_integration.h")]
     public void wayland_config_head_v2(void* head_handle, int enabled, int x, int y, double scale, int transform, int mode_width, int mode_height, int mode_refresh, int adaptive_sync);
 
-    [CCode (cname = "singularity_wayland_finish_output_config")]
+    [CCode (cname = "singularity_wayland_finish_output_config", cheader_filename = "wayland_integration.h")]
     public void wayland_finish_output_config();
 
-    [CCode (cname = "singularity_wayland_set_geometry")]
+    [CCode (cname = "singularity_wayland_set_geometry", cheader_filename = "wayland_integration.h")]
     public void wayland_set_geometry(void* toplevel_handle, int x, int y, int width, int height);
 
-    [CCode (cname = "singularity_wayland_get_window_geometry")]
+    [CCode (cname = "singularity_wayland_get_window_geometry", cheader_filename = "wayland_integration.h")]
     public bool wayland_get_window_geometry(void* toplevel_handle,
         out int x, out int y, out int width, out int height,
         out int maximized, out int fullscreen, out string? connector);
 
-    [CCode (cname = "singularity_wayland_set_tiled")]
+    [CCode (cname = "singularity_wayland_set_tiled", cheader_filename = "wayland_integration.h")]
     public void wayland_set_tiled(void* toplevel_handle, uint32 tiled);
 
-    [CCode (cname = "singularity_wayland_snap_view")]
+    [CCode (cname = "singularity_wayland_snap_view", cheader_filename = "wayland_integration.h")]
     public void wayland_snap_view(void* toplevel_handle, uint32 direction);
 
-    [CCode (cname = "singularity_wayland_move_to_workspace")]
+    [CCode (cname = "singularity_wayland_move_to_workspace", cheader_filename = "wayland_integration.h")]
     public void wayland_move_to_workspace(void* toplevel_handle, uint32 workspace_index);
 
-    [CCode (cname = "singularity_wayland_set_night_light")]
+    [CCode (cname = "singularity_wayland_set_night_light", cheader_filename = "wayland_integration.h")]
     public void wayland_set_night_light(int temperature);
 
-    [CCode (cname = "singularity_wayland_reset_night_light")]
+    [CCode (cname = "singularity_wayland_reset_night_light", cheader_filename = "wayland_integration.h")]
     public void wayland_reset_night_light();
 
-    [CCode (cname = "singularity_wayland_get_window_monitor")]
+    [CCode (cname = "singularity_wayland_get_window_monitor", cheader_filename = "wayland_integration.h")]
     public Gdk.Monitor? wayland_get_window_monitor(void* handle);
 
     [CCode (has_target = false)]
     public delegate void WindowOutputChangedCallback(void* handle, void* data);
-    [CCode (cname = "singularity_wayland_set_window_output_changed_callback")]
+    [CCode (cname = "singularity_wayland_set_window_output_changed_callback", cheader_filename = "wayland_integration.h")]
     public void wayland_set_window_output_changed_callback(WindowOutputChangedCallback cb, void* data);
 
-    [CCode (cname = "singularity_wayland_list_globals")]
+    [CCode (cname = "singularity_wayland_list_globals", cheader_filename = "wayland_integration.h")]
     public string wayland_list_globals();
 
     [CCode (cname = "singularity_request_surface_blur", cheader_filename = "blur_surface.h")]
