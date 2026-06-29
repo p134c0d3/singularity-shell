@@ -220,7 +220,7 @@ namespace Singularity {
             _target_connector = null;
 
             if (focused_handle != null) {
-                _target_monitor = Singularity.wayland_get_window_monitor(focused_handle);
+                _target_monitor = resolve_monitor_for_window(focused_handle);
             }
             if (_target_monitor == null) {
                 _target_monitor = Singularity.Panel.find_primary_monitor();
@@ -232,6 +232,75 @@ namespace Singularity {
                 _target_connector = _target_monitor.get_connector();
                 GtkLayerShell.set_monitor(this, _target_monitor);
             }
+        }
+
+        private Gdk.Monitor? resolve_monitor_for_window(void* handle) {
+            int x, y, w, h, maximized, fullscreen;
+            string? connector;
+            bool got_geometry = Singularity.wayland_get_window_geometry(handle,
+                out x, out y, out w, out h, out maximized, out fullscreen, out connector);
+
+            if (got_geometry && w > 0 && h > 0) {
+                var monitor = monitor_for_connector(connector);
+                if (monitor != null) return monitor;
+
+                monitor = monitor_for_geometry(x, y, w, h);
+                if (monitor != null) return monitor;
+            }
+
+            return Singularity.wayland_get_window_monitor(handle);
+        }
+
+        private Gdk.Monitor? monitor_for_connector(string? connector) {
+            if (connector == null || connector == "") return null;
+
+            var display = Gdk.Display.get_default();
+            if (display == null) return null;
+
+            var monitors = display.get_monitors();
+            for (uint i = 0; i < monitors.get_n_items(); i++) {
+                var monitor = monitors.get_item(i) as Gdk.Monitor;
+                if (monitor == null) continue;
+                if (monitor.get_connector() == connector) return monitor;
+            }
+            return null;
+        }
+
+        private Gdk.Monitor? monitor_for_geometry(int x, int y, int w, int h) {
+            var display = Gdk.Display.get_default();
+            if (display == null) return null;
+
+            var monitors = display.get_monitors();
+            int center_x = x + (w / 2);
+            int center_y = y + (h / 2);
+            Gdk.Monitor? best_monitor = null;
+            int best_area = 0;
+
+            for (uint i = 0; i < monitors.get_n_items(); i++) {
+                var monitor = monitors.get_item(i) as Gdk.Monitor;
+                if (monitor == null) continue;
+
+                var geo = monitor.get_geometry();
+                if (center_x >= geo.x && center_x < geo.x + geo.width &&
+                    center_y >= geo.y && center_y < geo.y + geo.height) {
+                    return monitor;
+                }
+
+                int ix1 = x > geo.x ? x : geo.x;
+                int iy1 = y > geo.y ? y : geo.y;
+                int ix2 = (x + w) < (geo.x + geo.width) ? (x + w) : (geo.x + geo.width);
+                int iy2 = (y + h) < (geo.y + geo.height) ? (y + h) : (geo.y + geo.height);
+                int iw = ix2 - ix1;
+                int ih = iy2 - iy1;
+                int area = (iw > 0 && ih > 0) ? iw * ih : 0;
+
+                if (area > best_area) {
+                    best_area = area;
+                    best_monitor = monitor;
+                }
+            }
+
+            return best_monitor;
         }
 
         private void on_take_clicked() {
