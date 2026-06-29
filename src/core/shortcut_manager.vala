@@ -684,6 +684,10 @@ namespace Singularity {
         private void screenshot_tool_action() {
             var app = GLib.Application.get_default() as Gtk.Application;
             var tool = ScreenshotTool.get_default(app);
+            if (tool.visible) {
+                tool.close_dialog();
+                return;
+            }
             if (!tool.ensure_screenshots()) return;
             var handle = AppSystem.get_default().get_focused_window_handle();
             tool.prepare_for_invocation(handle);
