@@ -89,7 +89,7 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
                 persist_user_appearance();
             }
         });
-        settings.changed["dark-mode"].connect(() => {
+        Singularity.Style.ThemeMode.get_default().changed.connect(() => {
             update_theme_mode();
         });
         settings.changed["singularity-theme"].connect(() => {
@@ -229,6 +229,8 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
         setup_secondary_surfaces();
         tiling_manager = new Singularity.TilingManager(Singularity.AppSystem.get_default());
 
+        setup_entrance();
+
         // Session recovery: snapshot windows on session end; offer to reopen
         // them (via a dialog) at the next login.
         session_recovery = new Singularity.SessionRecovery();
@@ -248,14 +250,6 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
                 mgr.new_notification(nid, "Singularity", summary, body, icon, new string[0]);
             });
             _resources.start();
-            GLib.Timeout.add(200, () => {
-                var _rt = GLib.Environment.get_variable("XDG_RUNTIME_DIR");
-                if (_rt != null && _rt != "") {
-                    try { GLib.FileUtils.set_contents(_rt + "/singularity-shell-ready", ""); }
-                    catch (GLib.Error e) {}
-                }
-                return GLib.Source.REMOVE;
-            });
             // Pre-warm widget modules (dlopen) at login so the first overview
             // open isn't stalled loading them.
             Singularity.OverviewWidgetRegistry.get_default().load_manifests();
@@ -828,6 +822,30 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
         workspace_overview.toggle();
     }
 
+    private bool _entrance_played = false;
+
+    private void setup_entrance() {
+        foreach (var bg in backgrounds) {
+            bg.first_painted.connect(trigger_entrance);
+        }
+        GLib.Timeout.add(2500, () => { trigger_entrance(); return GLib.Source.REMOVE; });
+    }
+
+    private void trigger_entrance() {
+        if (_entrance_played) return;
+        _entrance_played = true;
+
+        var rt = GLib.Environment.get_variable("XDG_RUNTIME_DIR");
+        if (rt != null && rt != "") {
+            try { GLib.FileUtils.set_contents(rt + "/singularity-shell-ready", ""); }
+            catch (GLib.Error e) {}
+        }
+
+        if (panel != null) panel.play_intro();
+        if (dock != null) dock.play_intro();
+        foreach (var bg in backgrounds) bg.play_intro();
+    }
+
     private void setup_backgrounds() {
         foreach (var bg in backgrounds) {
             bg.destroy();
@@ -886,8 +904,9 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
                 warning("Failed to sync accent-color to org.gnome.desktop.interface: %s", e.message);
             }
         }
-        // Re-tint the labwc SSD titlebar to follow the new accent.
-        apply_labwc_theme(settings.get_boolean("dark-mode"));
+        // Re-tint the labwc SSD titlebar to follow the new accent. The SSD frames
+        // app windows, so it follows the app tone (light in Dual mode).
+        apply_labwc_theme(Singularity.Style.ThemeMode.get_default().app_dark());
         persist_user_appearance();
     }
 
@@ -900,21 +919,26 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
     }
 
     private void update_theme_mode() {
-        bool dark = settings.get_boolean("dark-mode");
+        var tm = Singularity.Style.ThemeMode.get_default();
+        // The shell chrome follows the shell tone (dark unless full Light); the
+        // app-facing settings below follow the app tone (light unless full Dark)
+        // so third-party apps are light in Dual mode while the shell stays dark.
+        bool shell_dark = tm.shell_dark();
+        bool app_dark = tm.app_dark();
         var gtk_settings = Gtk.Settings.get_default();
         if (gtk_settings != null) {
-            gtk_settings.gtk_application_prefer_dark_theme = dark;
+            gtk_settings.gtk_application_prefer_dark_theme = shell_dark;
         } else {
             warning("Gtk.Settings.get_default() returned null");
         }
-        Singularity.Style.StyleManager.get_default().apply_color_scheme(dark);
+        Singularity.Style.StyleManager.get_default().apply_color_scheme(shell_dark);
         // Re-apply accent after scheme change so derived accent colors are
         // re-generated against the correct dark/light palette.
         update_accent_color();
-        // Propagate dark/light preference so non-Singularity apps follow our mode.
+        // Propagate the app tone so non-Singularity apps follow it.
         try {
             var iface = new GLib.Settings("org.gnome.desktop.interface");
-            iface.set_string("color-scheme", dark ? "prefer-dark" : "default");
+            iface.set_string("color-scheme", app_dark ? "prefer-dark" : "default");
             // Do NOT touch gtk-theme in GSettings - that is a system-wide setting
             // affecting all GTK apps. Our per-process gtk_theme_name override (set
             // at startup with a notify guard) is sufficient for Singularity processes.
@@ -923,7 +947,7 @@ public class SingularityApp : Singularity.ShellApplication, Singularity.Shell.Sh
         }
         // GTK3 has no portal appearance backend, so write its settings.ini for
         // dark mode. GTK4 apps already follow color-scheme through the portal.
-        string prefer = dark ? "1" : "0";
+        string prefer = app_dark ? "1" : "0";
         try {
             string gtk3_dir = GLib.Path.build_filename(GLib.Environment.get_home_dir(), ".config", "gtk-3.0");
             GLib.DirUtils.create_with_parents(gtk3_dir, 0755);
@@ -1081,6 +1105,13 @@ window.inactive.shadow.color: %s
         card.margin_start = 40;
         card.margin_end = 40;
 
+        // Capability prompts use category "cap.<name>" and carry the app's
+        // executable path as the resource. They render Android-style: a
+        // capability icon and a human label, and the raw exe path is NOT shown
+        // (the reason already reads "<app> wants to use the Camera"). The
+        // decision the broker persists stays keyed on that resource (the exe
+        // path), so "Always" trusts the app for that capability, not a name.
+        bool is_capability = category.has_prefix("cap.");
         string icon_name = "dialog-question-symbolic";
         string cat_display = category;
         switch (category) {
@@ -1088,13 +1119,18 @@ window.inactive.shadow.color: %s
             case "device": icon_name = "computer-symbolic"; cat_display = "Device"; break;
             case "filesystem": icon_name = "folder-symbolic"; cat_display = "Filesystem"; break;
             case "dbus.sensitive": icon_name = "dialog-password-symbolic"; cat_display = "D-Bus"; break;
+            case "cap.camera": icon_name = "camera-photo-symbolic"; cat_display = "Camera"; break;
+            case "cap.microphone": icon_name = "audio-input-microphone-symbolic"; cat_display = "Microphone"; break;
+            case "cap.gpu": icon_name = "video-display-symbolic"; cat_display = "Graphics acceleration"; break;
+            case "cap.input": icon_name = "input-keyboard-symbolic"; cat_display = "Input devices"; break;
+            case "cap.usb": icon_name = "drive-removable-media-symbolic"; cat_display = "USB devices"; break;
         }
 
         var icon = new Gtk.Image.from_icon_name(icon_name);
         icon.pixel_size = 56;
         card.append(icon);
 
-        var title_lbl = new Gtk.Label(_("Permission Request"));
+        var title_lbl = new Gtk.Label(is_capability ? cat_display : _("Permission Request"));
         title_lbl.add_css_class("title-1");
         card.append(title_lbl);
 
@@ -1105,11 +1141,15 @@ window.inactive.shadow.color: %s
         reason_lbl.justify = Gtk.Justification.CENTER;
         card.append(reason_lbl);
 
-        var detail_lbl = new Gtk.Label(_("%s: %s").printf(cat_display, resource));
-        detail_lbl.add_css_class("dim-label");
-        detail_lbl.wrap = true;
-        detail_lbl.justify = Gtk.Justification.CENTER;
-        card.append(detail_lbl);
+        // Only the technical (network/device/...) prompts show the raw resource.
+        // Capability prompts keep it clean (no exe path in the UI).
+        if (!is_capability) {
+            var detail_lbl = new Gtk.Label(_("%s: %s").printf(cat_display, resource));
+            detail_lbl.add_css_class("dim-label");
+            detail_lbl.wrap = true;
+            detail_lbl.justify = Gtk.Justification.CENTER;
+            card.append(detail_lbl);
+        }
 
         var group = new Singularity.Widgets.PreferencesGroup();
         var allow_row = new Singularity.Widgets.ActionRow(_("Allow"), _("Grant this time only"));
@@ -1120,7 +1160,8 @@ window.inactive.shadow.color: %s
         session_row.activated.connect(() => { decision = "allow_session"; done = true; dialog.close_dialog(); });
         group.add_row(session_row);
 
-        var always_row = new Singularity.Widgets.ActionRow(_("Always"), _("Remember and never ask again"));
+        var always_row = new Singularity.Widgets.ActionRow(_("Always"),
+            is_capability ? _("Always allow this app") : _("Remember and never ask again"));
         always_row.activated.connect(() => { decision = "allow_always"; done = true; dialog.close_dialog(); });
         group.add_row(always_row);
 
@@ -1148,6 +1189,72 @@ window.inactive.shadow.color: %s
         while (!done) { ctx.iteration(true); }
 
         return decision;
+    }
+
+    public bool show_confirm(string title, string body) throws IOError {
+        bool confirmed = false;
+        bool done = false;
+
+        var dialog = new Singularity.Shell.ShellDialog.anchored(this, true, true, true, true);
+        dialog.add_css_class("permission-dialog");
+
+        var card = new Gtk.Box(Gtk.Orientation.VERTICAL, 16);
+        card.halign = Gtk.Align.CENTER;
+        card.valign = Gtk.Align.CENTER;
+        card.add_css_class("power-card");
+        card.margin_top = 28;
+        card.margin_bottom = 28;
+        card.margin_start = 40;
+        card.margin_end = 40;
+
+        var icon = new Gtk.Image.from_icon_name("dialog-question-symbolic");
+        icon.pixel_size = 56;
+        card.append(icon);
+
+        var title_lbl = new Gtk.Label(title);
+        title_lbl.add_css_class("title-1");
+        title_lbl.wrap = true;
+        title_lbl.justify = Gtk.Justification.CENTER;
+        card.append(title_lbl);
+
+        var body_lbl = new Gtk.Label(body);
+        body_lbl.add_css_class("dim-label");
+        body_lbl.add_css_class("body");
+        body_lbl.wrap = true;
+        body_lbl.justify = Gtk.Justification.CENTER;
+        card.append(body_lbl);
+
+        var buttons = new Gtk.Box(Gtk.Orientation.HORIZONTAL, 12);
+        buttons.halign = Gtk.Align.CENTER;
+        buttons.margin_top = 8;
+
+        var cancel_btn = new Gtk.Button.with_label(_("Cancel"));
+        cancel_btn.add_css_class("pill");
+        cancel_btn.width_request = 128;
+        cancel_btn.clicked.connect(() => { confirmed = false; done = true; dialog.close_dialog(); });
+        buttons.append(cancel_btn);
+
+        var confirm_btn = new Gtk.Button.with_label(_("Confirm"));
+        confirm_btn.add_css_class("pill");
+        confirm_btn.add_css_class("suggested-action");
+        confirm_btn.width_request = 128;
+        confirm_btn.clicked.connect(() => { confirmed = true; done = true; dialog.close_dialog(); });
+        buttons.append(confirm_btn);
+
+        card.append(buttons);
+        dialog.content_box.append(card);
+
+        dialog.close_request.connect(() => {
+            if (!done) { confirmed = false; done = true; }
+            return false;
+        });
+
+        dialog.open_dialog();
+
+        var ctx = MainContext.default();
+        while (!done) { ctx.iteration(true); }
+
+        return confirmed;
     }
 
     public void add_favorite(string app_id) throws IOError {

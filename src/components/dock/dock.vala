@@ -22,6 +22,8 @@ namespace Singularity {
         private int _cached_icon_size = -1;
         private bool _cached_extended = false;
         private bool _intro_played = false;
+        private bool _refreshed_once = false;
+        private bool _intro_pending = false;
         private bool _hidden_for_fullscreen = false;
         private ulong _sig_clock = 0;
         private bool is_primary = true;
@@ -1358,21 +1360,28 @@ namespace Singularity {
             update_active_app(app_system.get_focused_app_id());
             this.queue_resize();
 
-            // First populated refresh: now that items exist, reveal the dock
-            // with the slide-up bounce. We defer one frame so GTK has laid
-            // out the new children before the animation starts.
-            if (!_intro_played && is_primary) {
-                _intro_played = true;
-                GLib.Idle.add(() => {
-                    main_container.opacity = 1.0;
-                    main_container.add_css_class("dock-intro");
-                    GLib.Timeout.add(620, () => {
-                        main_container.remove_css_class("dock-intro");
-                        return GLib.Source.REMOVE;
-                    });
+            if (!_refreshed_once && is_primary) {
+                _refreshed_once = true;
+                if (_intro_pending) {
+                    _intro_pending = false;
+                    play_intro();
+                }
+            }
+        }
+
+        public void play_intro() {
+            if (!is_primary || _intro_played) return;
+            if (!_refreshed_once) { _intro_pending = true; return; }
+            _intro_played = true;
+            GLib.Idle.add(() => {
+                main_container.opacity = 1.0;
+                main_container.add_css_class("dock-intro");
+                GLib.Timeout.add(620, () => {
+                    main_container.remove_css_class("dock-intro");
                     return GLib.Source.REMOVE;
                 });
-            }
+                return GLib.Source.REMOVE;
+            });
         }
 
         private static string win_handle_key(Singularity.AppSystem.Window win) {

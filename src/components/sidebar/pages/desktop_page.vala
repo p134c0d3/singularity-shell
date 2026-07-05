@@ -36,6 +36,31 @@ namespace Singularity {
         private string cached_wallpaper_accent = "#3584e4";
         private static bool wallpaper_css_loaded = false;
 
+        // Appends a rounded-rectangle sub-path to the Cairo context.
+        private static void round_rect(Cairo.Context ctx, double x, double y, double w, double h, double r) {
+            double PI = Math.PI;
+            ctx.new_sub_path();
+            ctx.arc(x + w - r, y + r,     r, -0.5 * PI, 0);
+            ctx.arc(x + w - r, y + h - r, r, 0,          0.5 * PI);
+            ctx.arc(x + r,     y + h - r, r, 0.5 * PI,   PI);
+            ctx.arc(x + r,     y + r,     r, PI,         1.5 * PI);
+            ctx.close_path();
+        }
+
+        // Map between the theme-mode schema token and the SelectionRow label.
+        private static string theme_mode_label(string token) {
+            switch (token) {
+                case "light": return _("Light");
+                case "dark":  return _("Dark");
+                default:      return _("Dual (Default)");
+            }
+        }
+        private static string theme_mode_token(string label) {
+            if (label == _("Light")) return "light";
+            if (label == _("Dark")) return "dark";
+            return "dual";
+        }
+
         // Inline custom color picker state (class fields - never capture mutable locals)
         private ExpanderRow? custom_picker_row = null;
         private FlowBox? accent_colors_box = null;
@@ -162,7 +187,13 @@ namespace Singularity {
             theme_preview.margin_top = 8;
             theme_preview.margin_bottom = 8;
             theme_preview.set_draw_func((area, ctx, pw, ph) => {
-                bool is_dark = settings.get_boolean("dark-mode");
+                // The preview shows the shell chrome (top panel + sidebar tiles)
+                // framing an app window, so it uses both tones at once: shell tone
+                // for the chrome, app tone for the window. This is what conveys
+                // Dual at a glance (dark chrome, light app).
+                string _tm = settings.get_string("theme-mode");
+                bool shell_dark = _tm != "light";
+                bool app_dark = _tm == "dark";
                 string accent_name = settings.get_string("accent-color");
                 Gdk.RGBA ac = Gdk.RGBA();
                 switch (accent_name) {
@@ -192,147 +223,186 @@ namespace Singularity {
                 }
 
                 double PI = Math.PI;
-                double fg   = is_dark ? 0.70 : 0.35;
-                double fg2  = is_dark ? 0.40 : 0.60;
-                double wbg  = is_dark ? 0.16 : 0.96;
-                double hbg  = is_dark ? 0.12 : 0.91;
-                double sbg  = is_dark ? 0.14 : 0.93;
-                double rr   = 8.0;
-                double m    = 12.0;  // margin around window
-                double wx   = m;
-                double wy   = m;
-                double ww   = pw - m * 2;
-                double wh   = ph - m * 2;
-                double hbH  = 24.0;
-                double sw   = 52.0;
+                double pad = 8.0;
 
-                // Window background
-                ctx.new_sub_path();
-                ctx.arc(wx + rr, wy + rr, rr, PI, 1.5*PI);
-                ctx.arc(wx + ww - rr, wy + rr, rr, 1.5*PI, 2*PI);
-                ctx.arc(wx + ww - rr, wy + wh - rr, rr, 0, 0.5*PI);
-                ctx.arc(wx + rr, wy + wh - rr, rr, 0.5*PI, PI);
-                ctx.close_path();
-                ctx.set_source_rgb(wbg, wbg, wbg);
+                // Desktop backdrop leans to the shell tone.
+                double d = shell_dark ? 0.10 : 0.86;
+                ctx.set_source_rgb(d, d, d + 0.01);
+                round_rect(ctx, 0, 0, pw, ph, 10);
                 ctx.fill();
 
-                // Headerbar
-                ctx.new_sub_path();
-                ctx.arc(wx + rr, wy + rr, rr, PI, 1.5*PI);
-                ctx.arc(wx + ww - rr, wy + rr, rr, 1.5*PI, 2*PI);
-                ctx.line_to(wx + ww, wy + hbH);
-                ctx.line_to(wx, wy + hbH);
-                ctx.close_path();
-                ctx.set_source_rgb(hbg, hbg, hbg);
-                ctx.fill();
-                // separator
-                ctx.set_source_rgba(fg2, fg2, fg2, 0.2);
-                ctx.rectangle(wx, wy + hbH, ww, 0.5);
-                ctx.fill();
-                // title
-                ctx.set_source_rgba(fg, fg, fg, 0.5);
-                ctx.rectangle(wx + ww/2 - 20, wy + hbH/2 - 3, 40, 5);
-                ctx.fill();
-                // close button - simple circle
-                double cx = wx + ww - 13;
-                double cy = wy + hbH/2;
-                ctx.set_source_rgba(fg, fg, fg, 0.25);
-                ctx.arc(cx, cy, 5, 0, 2*PI);
-                ctx.fill();
+                double s_bg = shell_dark ? 0.17 : 0.97;
+                double s_fg = shell_dark ? 0.78 : 0.32;
+                double panelH = 16.0;
 
-                // Sidebar
-                ctx.set_source_rgb(sbg, sbg, sbg);
-                ctx.rectangle(wx, wy + hbH, sw, wh - hbH);
+                // Top panel (shell tone): centred clock bar + tray dots (accent first)
+                round_rect(ctx, pad, pad, pw - pad * 2, panelH, 5);
+                ctx.set_source_rgb(s_bg, s_bg, s_bg);
                 ctx.fill();
-                ctx.set_source_rgba(fg2, fg2, fg2, 0.15);
-                ctx.rectangle(wx + sw, wy + hbH, 0.5, wh - hbH);
+                ctx.set_source_rgba(s_fg, s_fg, s_fg, 0.45);
+                ctx.rectangle(pw / 2 - 13, pad + panelH / 2 - 2, 26, 4);
                 ctx.fill();
-
-                for (int ni = 0; ni < 3; ni++) {
-                    double iy = wy + hbH + 12 + ni * 18;
-                    bool active = (ni == 1);
-                    if (active) {
-                        // accent pill bg
-                        double pr = 5.0, px2 = wx + 5, pyw = sw - 10, pyh = 13;
-                        ctx.set_source_rgba(ac.red, ac.green, ac.blue, is_dark ? 0.20 : 0.13);
-                        ctx.new_sub_path();
-                        ctx.arc(px2 + pr, iy + pr, pr, PI, 1.5*PI);
-                        ctx.arc(px2 + pyw - pr, iy + pr, pr, 1.5*PI, 2*PI);
-                        ctx.arc(px2 + pyw - pr, iy + pyh - pr, pr, 0, 0.5*PI);
-                        ctx.arc(px2 + pr, iy + pyh - pr, pr, 0.5*PI, PI);
-                        ctx.close_path();
-                        ctx.fill();
-                        // accent dot
-                        ctx.set_source_rgba(ac.red, ac.green, ac.blue, 0.9);
-                    } else {
-                        ctx.set_source_rgba(fg, fg, fg, 0.25);
-                    }
-                    ctx.arc(wx + 17, iy + 6, 4, 0, 2*PI);
-                    ctx.fill();
-                    ctx.set_source_rgba(fg, fg, fg, active ? 0.6 : 0.2);
-                    ctx.rectangle(wx + 27, iy + 4, 18, 4);
+                for (int di = 0; di < 3; di++) {
+                    if (di == 0) ctx.set_source_rgba(ac.red, ac.green, ac.blue, 0.9);
+                    else ctx.set_source_rgba(s_fg, s_fg, s_fg, 0.5);
+                    ctx.arc(pw - pad - 9 - di * 9, pad + panelH / 2, 2.3, 0, 2 * PI);
                     ctx.fill();
                 }
 
-                // Content
-                double ccx = wx + sw + 8;
-                double ccy = wy + hbH + 8;
-                double ccw = wx + ww - ccx - 8;
-                double cch = wh - hbH - 16;
+                double bodyY = pad + panelH + 8;
+                double bodyH = ph - bodyY - pad;
 
-                // title line
-                ctx.set_source_rgba(fg, fg, fg, 0.55);
-                ctx.rectangle(ccx, ccy + 4, ccw * 0.5, 5);
+                // Right sidebar (shell tone) with a 2x2 grid of tiles, first active
+                double sbW = 72.0;
+                double sbX = pw - pad - sbW;
+                round_rect(ctx, sbX, bodyY, sbW, bodyH, 6);
+                ctx.set_source_rgb(s_bg, s_bg, s_bg);
                 ctx.fill();
-                // body lines
-                ctx.set_source_rgba(fg, fg, fg, 0.2);
-                ctx.rectangle(ccx, ccy + 16, ccw * 0.82, 4);
-                ctx.fill();
-                ctx.rectangle(ccx, ccy + 24, ccw * 0.65, 4);
-                ctx.fill();
+                double tg = 6.0;
+                double tw = (sbW - tg * 3) / 2.0;
+                double th = (bodyH - tg * 3) / 2.0;
+                for (int ti = 0; ti < 4; ti++) {
+                    double txx = sbX + tg + (ti % 2) * (tw + tg);
+                    double tyy = bodyY + tg + (ti / 2) * (th + tg);
+                    bool tactive = (ti == 0);
+                    if (tactive) ctx.set_source_rgba(ac.red, ac.green, ac.blue, 0.85);
+                    else ctx.set_source_rgba(s_fg, s_fg, s_fg, shell_dark ? 0.16 : 0.12);
+                    round_rect(ctx, txx, tyy, tw, th, 4);
+                    ctx.fill();
+                    if (tactive) ctx.set_source_rgba(1, 1, 1, 0.9);
+                    else ctx.set_source_rgba(s_fg, s_fg, s_fg, 0.45);
+                    ctx.arc(txx + tw / 2, tyy + th / 2, 2.6, 0, 2 * PI);
+                    ctx.fill();
+                }
 
+                // App window (app tone) filling the left area
+                double a_bg = app_dark ? 0.17 : 0.99;
+                double a_hb = app_dark ? 0.13 : 0.93;
+                double a_fg = app_dark ? 0.80 : 0.28;
+                double wx = pad;
+                double wy = bodyY;
+                double ww = sbX - 8 - wx;
+                double wh = bodyH;
+                double rr = 6.0;
+                double hbH = 16.0;
+
+                round_rect(ctx, wx, wy, ww, wh, rr);
+                ctx.set_source_rgb(a_bg, a_bg, a_bg);
+                ctx.fill();
+                // headerbar, clipped so the top corners stay rounded
+                ctx.save();
+                round_rect(ctx, wx, wy, ww, wh, rr);
+                ctx.clip();
+                ctx.set_source_rgb(a_hb, a_hb, a_hb);
+                ctx.rectangle(wx, wy, ww, hbH);
+                ctx.fill();
+                ctx.restore();
+                ctx.set_source_rgba(a_fg, a_fg, a_fg, 0.16);
+                ctx.rectangle(wx, wy + hbH, ww, 0.5);
+                ctx.fill();
+                // close dot + title
+                ctx.set_source_rgba(a_fg, a_fg, a_fg, 0.3);
+                ctx.arc(wx + ww - 9, wy + hbH / 2, 3, 0, 2 * PI);
+                ctx.fill();
+                ctx.set_source_rgba(a_fg, a_fg, a_fg, 0.45);
+                ctx.rectangle(wx + 8, wy + hbH / 2 - 2, ww * 0.38, 4);
+                ctx.fill();
+                // content lines
+                ctx.set_source_rgba(a_fg, a_fg, a_fg, 0.5);
+                ctx.rectangle(wx + 8, wy + hbH + 8, ww * 0.55, 4);
+                ctx.fill();
+                ctx.set_source_rgba(a_fg, a_fg, a_fg, 0.22);
+                ctx.rectangle(wx + 8, wy + hbH + 16, ww * 0.8, 3.5);
+                ctx.fill();
+                ctx.rectangle(wx + 8, wy + hbH + 23, ww * 0.68, 3.5);
+                ctx.fill();
                 // accent button
-                double bw = 36.0, bh = 13.0, br2 = 4.0;
-                double bx2 = ccx + ccw - bw;
-                double by2 = ccy + cch - bh;
+                double bw = 30.0, bh = 11.0;
+                round_rect(ctx, wx + ww - bw - 8, wy + wh - bh - 7, bw, bh, 4);
                 ctx.set_source_rgba(ac.red, ac.green, ac.blue, 0.9);
-                ctx.new_sub_path();
-                ctx.arc(bx2 + br2, by2 + br2, br2, PI, 1.5*PI);
-                ctx.arc(bx2 + bw - br2, by2 + br2, br2, 1.5*PI, 2*PI);
-                ctx.arc(bx2 + bw - br2, by2 + bh - br2, br2, 0, 0.5*PI);
-                ctx.arc(bx2 + br2, by2 + bh - br2, br2, 0.5*PI, PI);
-                ctx.close_path();
                 ctx.fill();
-                ctx.set_source_rgba(1, 1, 1, 0.8);
-                ctx.rectangle(bx2 + bw/2 - 10, by2 + bh/2 - 2, 20, 4);
-                ctx.fill();
-
-                // Window border
-                ctx.new_sub_path();
-                ctx.arc(wx + rr, wy + rr, rr, PI, 1.5*PI);
-                ctx.arc(wx + ww - rr, wy + rr, rr, 1.5*PI, 2*PI);
-                ctx.arc(wx + ww - rr, wy + wh - rr, rr, 0, 0.5*PI);
-                ctx.arc(wx + rr, wy + wh - rr, rr, 0.5*PI, PI);
-                ctx.close_path();
-                ctx.set_source_rgba(fg2, fg2, fg2, is_dark ? 0.35 : 0.20);
+                // window border
+                round_rect(ctx, wx, wy, ww, wh, rr);
+                ctx.set_source_rgba(a_fg, a_fg, a_fg, app_dark ? 0.3 : 0.14);
                 ctx.set_line_width(0.8);
                 ctx.stroke();
             });
-            settings.changed["dark-mode"].connect(() => { theme_preview.queue_draw(); });
+            settings.changed["theme-mode"].connect(() => { theme_preview.queue_draw(); });
             settings.changed["accent-color"].connect(() => { theme_preview.queue_draw(); });
             settings.changed["background-picture-uri"].connect(() => { theme_preview.queue_draw(); });
             theme_preview_row.set_child(theme_preview);
             app_group.add_row(theme_preview_row);
 
-            bool dark_mode = settings.get_boolean("dark-mode");
-            var dark_row = new SwitchRow(_("Dark Mode"), _("Use dark theme"), dark_mode);
-            dark_row.switch_btn.notify["active"].connect(() => {
-                bool active = dark_row.switch_btn.active;
-                settings.set_boolean("dark-mode", active);
-                // color-scheme propagation is handled centrally by update_theme_mode()
-                // via the settings.changed["dark-mode"] signal in main.vala.
+            // Theme mode: a SelectionRow, the same dropdown selector used across
+            // the shell (cursor theme, time zone, power profile, ...). The fourth
+            // combination (light shell with dark apps) is intentionally absent.
+            var theme_row = new SelectionRow(_("Theme"),
+                { _("Dual (Default)"), _("Light"), _("Dark") },
+                theme_mode_label(settings.get_string("theme-mode")));
+            theme_row.selected.connect((item) => {
+                string tok = theme_mode_token(item);
+                if (settings.get_string("theme-mode") != tok)
+                    settings.set_string("theme-mode", tok);
             });
-            app_group.add_row(dark_row);
+            app_group.add_row(theme_row);
+
+            // Adaptive: follow a daily schedule (dark at night, the chosen mode by
+            // day). Pointless when the base mode is already Dark.
+            var adaptive_row = new SwitchRow(_("Adaptive"),
+                _("Dark at night, your chosen theme by day"),
+                settings.get_boolean("theme-adaptive"));
+            adaptive_row.switch_btn.notify["active"].connect(() => {
+                settings.set_boolean("theme-adaptive", adaptive_row.switch_btn.active);
+            });
+            app_group.add_row(adaptive_row);
+
+            // Night window, shown only while Adaptive is on.
+            var time_row = new PreferencesRow();
+            time_row.activatable = false;
+            var time_box = new Box(Orientation.HORIZONTAL, 8);
+            time_box.margin_top = 8;
+            time_box.margin_bottom = 8;
+            time_box.margin_start = 12;
+            time_box.margin_end = 12;
+            var from_lbl = new Label(_("Dark from"));
+            from_lbl.valign = Align.CENTER;
+            time_box.append(from_lbl);
+            var from_picker = new Singularity.Widgets.TimePicker(settings.get_string("theme-adaptive-from"));
+            time_box.append(from_picker);
+            var to_lbl = new Label(_("to"));
+            to_lbl.valign = Align.CENTER;
+            time_box.append(to_lbl);
+            var to_picker = new Singularity.Widgets.TimePicker(settings.get_string("theme-adaptive-to"));
+            time_box.append(to_picker);
+            time_row.set_child(time_box);
+            app_group.add_row(time_row);
+
+            from_picker.changed.connect(() => {
+                settings.set_string("theme-adaptive-from", from_picker.time);
+            });
+            to_picker.changed.connect(() => {
+                settings.set_string("theme-adaptive-to", to_picker.time);
+            });
+
+            // Keep the controls in sync with the schema (covers external changes)
+            // and enforce the Dark-disables-Adaptive and visibility rules.
+            settings.changed.connect((key) => {
+                if (key != "theme-mode" && key != "theme-adaptive") return;
+                string m = settings.get_string("theme-mode");
+                bool adaptive = settings.get_boolean("theme-adaptive");
+                theme_row.current_value = theme_mode_label(m);
+                adaptive_row.switch_btn.active = adaptive;
+                adaptive_row.set_sensitive(m != "dark");
+                time_row.visible = adaptive && m != "dark";
+            });
+            {
+                string m0 = settings.get_string("theme-mode");
+                bool adaptive0 = settings.get_boolean("theme-adaptive");
+                theme_row.current_value = theme_mode_label(m0);
+                adaptive_row.switch_btn.active = adaptive0;
+                adaptive_row.set_sensitive(m0 != "dark");
+                time_row.visible = adaptive0 && m0 != "dark";
+            }
 
             var accent_row = new PreferencesRow();
             var accent_box = new Box(Orientation.VERTICAL, 12);
@@ -1453,25 +1523,27 @@ namespace Singularity {
         }
 
         private void add_to_recent(string uri) {
+            if (uri == null || uri.length == 0) return;
             string[] recent = settings.get_strv("recent-wallpapers");
-            var list = new ArrayList<string>();
-            list.add(uri);
+            string[] new_list = {};
+            new_list += uri;
             foreach (string r in recent) {
-                if (r != uri) list.add(r);
+                if (r != null && r.length > 0 && r != uri && new_list.length < 10) {
+                    new_list += r;
+                }
             }
-            while (list.size > 10) {
-                list.remove_at(list.size - 1);
-            }
-            settings.set_strv("recent-wallpapers", list.to_array());
+            settings.set_strv("recent-wallpapers", new_list);
         }
 
         private void remove_from_recent(string uri) {
             string[] recent = settings.get_strv("recent-wallpapers");
-            var list = new ArrayList<string>();
+            string[] new_list = {};
             foreach (string r in recent) {
-                if (r != uri) list.add(r);
+                if (r != null && r.length > 0 && r != uri) {
+                    new_list += r;
+                }
             }
-            settings.set_strv("recent-wallpapers", list.to_array());
+            settings.set_strv("recent-wallpapers", new_list);
         }
 
         private void update_preview_async() {
@@ -2013,8 +2085,8 @@ namespace Singularity {
         private static int active_thumb_loads = 0;
 
         public WallpaperCard(string uri, bool is_recent) {
-            this.uri = uri;
             Object(orientation: Orientation.VERTICAL, spacing: 0);
+            this.uri = uri;
             add_css_class("wallpaper-card");
             add_css_class("workspace-preview");
             halign = Align.CENTER;

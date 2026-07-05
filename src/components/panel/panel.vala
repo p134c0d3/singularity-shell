@@ -78,6 +78,7 @@ namespace Singularity {
             main_box.add_css_class("panel");
             main_box.overflow = Overflow.VISIBLE;
             overlay.set_child(main_box);
+            if (is_primary && !is_greeter_mode) main_box.opacity = 0;
 
             _corner_tl = create_corner_hint("corner-hint-tl");
             _corner_tl.can_target = false;
@@ -526,6 +527,16 @@ namespace Singularity {
         private bool update_clock() {
             clock_label.label = new DateTime.now_local().format(_clock_format_str);
             return true;
+        }
+
+        public void play_intro() {
+            if (!is_primary || is_greeter_mode) return;
+            main_box.opacity = 1.0;
+            main_box.add_css_class("panel-intro");
+            GLib.Timeout.add(560, () => {
+                main_box.remove_css_class("panel-intro");
+                return GLib.Source.REMOVE;
+            });
         }
 
         public void set_overview_mode(bool enabled, bool instant = false) {

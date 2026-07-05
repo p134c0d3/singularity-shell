@@ -4,6 +4,12 @@ using Singularity.Widgets;
 
 namespace Singularity {
 
+    [DBus (name = "io.github.mirkobrombin.ush.Broker1")]
+    interface UshBroker : Object {
+        public abstract async void dev_shell_status (out string policy, out bool enabled) throws GLib.Error;
+        public abstract async void set_dev_shell_enabled (bool enabled) throws GLib.Error;
+    }
+
     public class DeveloperPage : SettingsPage {
 
         private static string LOG_FILE = GLib.Path.build_filename(
@@ -42,8 +48,15 @@ namespace Singularity {
         /* GSettings for tiling (kept alive as field) */
         private GLib.Settings _tiling_settings;
 
+        private PreferencesGroup dsh_group;
+
         public DeveloperPage (SettingsView view) {
             base(_("Developer"));
+
+            dsh_group = new PreferencesGroup (_("Developer Shell"));
+            dsh_group.visible = false;
+            add_group (dsh_group);
+            setup_dev_shell.begin ();
 
             var dbg = DebugManager.get_default ();
             _tiling_settings = new GLib.Settings ("dev.sinty.desktop");
@@ -689,6 +702,48 @@ namespace Singularity {
                 _border_css = null;
             }
             base.dispose ();
+        }
+
+        private async void setup_dev_shell () {
+            try {
+                UshBroker broker = yield Bus.get_proxy (BusType.SESSION,
+                    "io.github.mirkobrombin.ush.Broker",
+                    "/io/github/mirkobrombin/ush/Broker");
+                string policy;
+                bool enabled;
+                yield broker.dev_shell_status (out policy, out enabled);
+                build_dsh_ui (broker, policy, enabled);
+                dsh_group.visible = true;
+            } catch (GLib.Error e) {
+            }
+        }
+
+        private void build_dsh_ui (UshBroker broker, string policy, bool enabled) {
+            if (policy == "forbidden") {
+                dsh_group.add_row (new ActionRow (_("Developer Shell"),
+                    _("Disabled by your device or organization policy"),
+                    "changes-prevent-symbolic"));
+                return;
+            }
+            var sw = new SwitchRow (_("Developer Shell"),
+                "Run isolated developer containers (dsh) from the terminal");
+            sw.active = enabled;
+            if (policy == "enabled") {
+                sw.sensitive = false;
+            } else {
+                sw.switch_btn.notify["active"].connect (() => {
+                    apply_dev_shell.begin (broker, sw.switch_btn.active);
+                });
+            }
+            dsh_group.add_row (sw);
+        }
+
+        private async void apply_dev_shell (UshBroker broker, bool en) {
+            try {
+                yield broker.set_dev_shell_enabled (en);
+            } catch (GLib.Error e) {
+                warning ("set_dev_shell_enabled: %s", e.message);
+            }
         }
     }
 }

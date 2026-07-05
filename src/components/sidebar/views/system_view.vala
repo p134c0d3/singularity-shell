@@ -135,16 +135,23 @@ namespace Singularity {
                             bluetooth.set_power.begin(!bluetooth.is_powered);
                         });
 
-                        // Dark Mode Tile
-                        bool dark_mode = settings.get_boolean("dark-mode");
-                        var dark_tile = new QuickSettingTile("Dark Style", "night-light-symbolic", dark_mode);
-                        dark_tile.subtitle = dark_mode ? _("On") : _("Off");
-                        dark_tile.clicked.connect(() => {
-                            settings.set_boolean("dark-mode", dark_tile.active);
+                        // Theme tile (3-state: Dual, Light, Dark) - same multi-state
+                        // model as the power profile tile. Click cycles the mode; the
+                        // nav arrow opens the Appearance settings.
+                        string tmode = settings.get_string("theme-mode");
+                        var theme_tile = new QuickSettingTile(_("Theme"), theme_tile_icon(tmode), false);
+                        theme_tile.n_states = 3;
+                        theme_tile.auto_toggle = false;
+                        theme_tile.state = theme_tile_state(tmode);
+                        theme_tile.subtitle = theme_tile_label(tmode);
+                        theme_tile.clicked.connect(() => {
+                            settings.set_string("theme-mode", theme_next_mode(settings.get_string("theme-mode")));
                         });
-                        settings.changed["dark-mode"].connect(() => {
-                            dark_tile.active = settings.get_boolean("dark-mode");
-                            dark_tile.subtitle = dark_tile.active ? _("On") : _("Off");
+                        settings.changed["theme-mode"].connect(() => {
+                            string m = settings.get_string("theme-mode");
+                            theme_tile.state = theme_tile_state(m);
+                            theme_tile.subtitle = theme_tile_label(m);
+                            theme_tile.icon_name = theme_tile_icon(m);
                         });
 
                         // Tiling Tile
@@ -318,8 +325,8 @@ namespace Singularity {
                         grid.attach(wifi_nav, 0, 0, 1, 1);
                         grid.attach(bt_nav, 1, 0, 1, 1);
 
-                        // Row 1: Dark Style & Night Light
-                        grid.attach(make_tile_with_nav(dark_tile, "desktop"), 0, 1, 1, 1);
+                        // Row 1: Theme & Night Light
+                        grid.attach(make_tile_with_nav(theme_tile, "desktop"), 0, 1, 1, 1);
                         grid.attach(make_tile_with_nav(night_tile, "displays"), 1, 1, 1, 1);
 
                         // Row 2: Airplane Mode & Keyboard Backlight / Tiling
@@ -341,15 +348,9 @@ namespace Singularity {
                             grid.attach(hotspot_nav, 0, 5, 1, 1);
                         }
 
-                        content.append(grid);
-
                         // GameMode quick tile - only when gamemode daemon is available
                         var gm2 = GameModeManager.get_default();
                         if (gm2.available) {
-                            var gm_grid = new Grid();
-                            gm_grid.column_spacing = 6;
-                            gm_grid.column_homogeneous = true;
-                            gm_grid.margin_bottom = 12;
                             var gm_tile = new QuickSettingTile("Game Mode", "applications-games-symbolic", gm2.active);
                             gm_tile.subtitle = gm2.active ? _("Active") : _("Inactive");
                             gm_tile.clicked.connect(() => {
@@ -360,9 +361,12 @@ namespace Singularity {
                                 gm_tile.active = gm2.active;
                                 gm_tile.subtitle = gm2.active ? _("Active") : _("Inactive");
                             });
-                            gm_grid.attach(gm_tile, 0, 0, 2, 1);
-                            content.append(gm_grid);
+                            var gm_wrapper = make_tile_with_nav(gm_tile, "performance");
+                            if (kbd_mgr.available) grid.attach(gm_wrapper, 0, 6, 1, 1);
+                            else grid.attach(gm_wrapper, 1, 5, 1, 1);
                         }
+
+                        content.append(grid);
 
             var sliders_group = new PreferencesGroup();
 
@@ -550,6 +554,38 @@ namespace Singularity {
                 case "power-saver":  return "power-profile-power-saver-symbolic";
                 case "performance":  return "power-profile-performance-symbolic";
                 default:             return "power-profile-balanced-symbolic";
+            }
+        }
+
+        // Theme tile (Dual/Light/Dark) helpers, mirroring the power profile tile.
+        private static string theme_tile_label(string mode) {
+            switch (mode) {
+                case "light": return _("Light");
+                case "dark":  return _("Dark");
+                default:      return _("Dual");
+            }
+        }
+        private static string theme_tile_icon(string mode) {
+            switch (mode) {
+                case "light": return "weather-clear-symbolic";
+                case "dark":  return "weather-clear-night-symbolic";
+                default:      return "weather-few-clouds-symbolic";
+            }
+        }
+        // 0 = light (off), 1 = dual (partial), 2 = dark (fully active).
+        private static int theme_tile_state(string mode) {
+            switch (mode) {
+                case "light": return 0;
+                case "dark":  return 2;
+                default:      return 1;
+            }
+        }
+        // Click cycles Dual -> Light -> Dark -> Dual.
+        private static string theme_next_mode(string mode) {
+            switch (mode) {
+                case "light": return "dark";
+                case "dark":  return "dual";
+                default:      return "light";
             }
         }
 

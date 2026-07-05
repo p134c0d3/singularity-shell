@@ -153,6 +153,7 @@ namespace Singularity.SidebarPages {
         private AccountUser user;
         private AccountsService service;
         private UsersPage parent_page;
+        private Gee.ArrayList<Avatar> avatar_widgets;
 
         public UserDetailPage(SettingsView view, AccountUser user,
                                AccountsService service, UsersPage parent) {
@@ -166,6 +167,9 @@ namespace Singularity.SidebarPages {
         }
 
         private void build_ui() {
+            var pic_group = build_avatar_picker();
+            if (pic_group != null) add_group(pic_group);
+
             // User info card
             var info_group = new PreferencesGroup("");
             var name_row  = new ActionRow(_("Full Name"), "", null);
@@ -206,6 +210,106 @@ namespace Singularity.SidebarPages {
             del_row.activated.connect(show_delete_confirm);
             danger_group.add_row(del_row);
             add_group(danger_group);
+        }
+
+        private static string? avatars_dir() {
+            foreach (var d in GLib.Environment.get_system_data_dirs()) {
+                var p = Path.build_filename(d, "singularity", "avatars");
+                if (FileUtils.test(p, FileTest.IS_DIR)) return p;
+            }
+            if (FileUtils.test("/usr/share/singularity/avatars", FileTest.IS_DIR))
+                return "/usr/share/singularity/avatars";
+            return null;
+        }
+
+        private PreferencesGroup? build_avatar_picker() {
+            string? dir = avatars_dir();
+            if (dir == null) return null;
+            var ids = new Gee.ArrayList<string>();
+            try {
+                var en = File.new_for_path(dir).enumerate_children(
+                    "standard::name", FileQueryInfoFlags.NONE);
+                FileInfo fi;
+                while ((fi = en.next_file()) != null) {
+                    var nm = fi.get_name();
+                    if (nm.has_suffix(".png")) ids.add(nm.substring(0, nm.length - 4));
+                }
+            } catch (GLib.Error e) {
+                return null;
+            }
+            if (ids.size == 0) return null;
+            ids.sort();
+
+            string current = Path.get_basename(user.icon_file);
+            if (current.has_suffix(".png"))
+                current = current.substring(0, current.length - 4);
+
+            var group = new PreferencesGroup(_("Picture"));
+            var flow = new FlowBox();
+            flow.selection_mode = SelectionMode.NONE;
+            flow.max_children_per_line = (uint) ids.size;
+            flow.column_spacing = 12;
+            flow.row_spacing = 12;
+            flow.halign = Align.START;
+            flow.margin_top = 8;
+            flow.margin_bottom = 8;
+            flow.margin_start = 8;
+            flow.margin_end = 8;
+
+            avatar_widgets = new Gee.ArrayList<Avatar>();
+            foreach (var id in ids) {
+                string aid = id;
+                string path = dir + "/" + aid + ".png";
+                var av = new Avatar(64);
+                av.set_from_file(path);
+                av.selected = (aid == current);
+                av.set_cursor_from_name("pointer");
+                av.set_data<string>("aid", aid);
+                var click = new GestureClick();
+                click.released.connect(() => { choose_avatar(aid, path); });
+                av.add_controller(click);
+                avatar_widgets.add(av);
+                flow.append(av);
+            }
+
+            var add_av = new Avatar(64);
+            add_av.add_mode = true;
+            add_av.set_cursor_from_name("pointer");
+            add_av.tooltip_text = _("Choose a custom picture");
+            var add_click = new GestureClick();
+            add_click.released.connect(() => { pick_custom_avatar(); });
+            add_av.add_controller(add_click);
+            flow.append(add_av);
+
+            var prow = new PreferencesRow();
+            prow.set_child(flow);
+            group.add_row(prow);
+            return group;
+        }
+
+        private void choose_avatar(string id, string path) {
+            foreach (var av in avatar_widgets)
+                av.selected = (av.get_data<string>("aid") == id);
+            apply_icon.begin(path);
+        }
+
+        private void pick_custom_avatar() {
+            var app = (SingularityApp) GLib.Application.get_default();
+            if (app.sidebar == null) return;
+            app.sidebar.open_file_picker(_("Images"),
+                { "*.png", "*.jpg", "*.jpeg", "*.webp" }, (file) => {
+                    var path = file.get_path();
+                    if (path != null) {
+                        foreach (var av in avatar_widgets) av.selected = false;
+                        apply_icon.begin(path);
+                    }
+                });
+        }
+
+        private async void apply_icon(string path) {
+            try { yield user.set_icon_file(path); } catch (GLib.Error e) {
+                warning("set_icon_file: %s", e.message);
+            }
         }
 
         private async void set_account_type(int t) {

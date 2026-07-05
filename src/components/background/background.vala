@@ -10,6 +10,9 @@ namespace Singularity {
         private bool _wp_showing_a = true;
         private uint _wp_clear_id = 0;
 
+        public signal void first_painted();
+        private bool _first_painted_done = false;
+
         public Background(Gtk.Application app, Gdk.Monitor? monitor = null) {
             Object(application: app);
             init_for_window(this);
@@ -48,6 +51,21 @@ namespace Singularity {
             manager.wallpaper_changed.connect(() => {
                 update_wallpaper(manager);
             });
+            map.connect_after(() => {
+                if (_first_painted_done) return;
+                var clock = get_frame_clock();
+                if (clock == null) {
+                    GLib.Timeout.add(50, () => { emit_first_painted(); return GLib.Source.REMOVE; });
+                    return;
+                }
+                ulong handler = 0;
+                handler = clock.after_paint.connect(() => {
+                    clock.disconnect(handler);
+                    emit_first_painted();
+                });
+                queue_draw();
+            });
+
             present();
             var click_controller = new GestureClick();
             click_controller.button = 3;
@@ -63,6 +81,20 @@ namespace Singularity {
                 AppSystem.get_default().notify_desktop_focused();
             });
             ((Gtk.Widget)this).add_controller(left_click);
+        }
+
+        private void emit_first_painted() {
+            if (_first_painted_done) return;
+            _first_painted_done = true;
+            first_painted();
+        }
+
+        public void play_intro() {
+            wp_stack.add_css_class("wallpaper-intro");
+            GLib.Timeout.add(950, () => {
+                wp_stack.remove_css_class("wallpaper-intro");
+                return GLib.Source.REMOVE;
+            });
         }
 
         private void update_wallpaper(WallpaperManager manager) {
